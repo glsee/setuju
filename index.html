@@ -1,0 +1,800 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>SeTuJu — Navigasi</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<style>
+  :root { --bg:#0f1720; --panel:#16212d; --text:#eef3f8; --muted:#9fb0c2; --accent:#33ccff; --gag:#ff3b6b; }
+  body.gag { --accent: var(--gag); }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #map { position:absolute; inset:0; }
+  .top { position:absolute; top:12px; left:12px; right:12px; z-index:1000; display:flex; flex-direction:column; gap:8px; max-width:460px; }
+  .bar { background:var(--panel); border-radius:14px; padding:10px 12px; box-shadow:0 6px 24px #0008; }
+  .brand { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .brand b { font-size:20px; letter-spacing:.5px; }
+  .brand small { color:var(--muted); display:block; font-size:11px; }
+  #langSel { background:#0f1720; color:var(--text); border:1px solid #2a3a4c; border-radius:8px; padding:4px 6px; font-size:13px; font-weight:600; margin-left:auto; }
+  .switch { display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none; font-size:13px; font-weight:600; }
+  .switch input { display:none; }
+  .track { width:46px; height:26px; border-radius:13px; background:#334; position:relative; transition:.2s; }
+  .track::after { content:""; position:absolute; top:3px; left:3px; width:20px; height:20px; border-radius:50%; background:#fff; transition:.2s; }
+  .switch input:checked + .track { background:var(--gag); }
+  .switch input:checked + .track::after { left:23px; }
+  .field { position:relative; margin-top:6px; }
+  .field input { width:100%; padding:10px 12px; border-radius:10px; border:1px solid #2a3a4c; background:#0f1720; color:var(--text); font-size:15px; }
+  .sugg { position:absolute; left:0; right:0; top:100%; background:#0f1720; border:1px solid #2a3a4c; border-radius:10px; margin-top:4px; z-index:5; overflow:hidden; }
+  .sugg div { padding:9px 12px; font-size:14px; cursor:pointer; border-bottom:1px solid #1f2b38; }
+  .sugg div:hover { background:#1c2a38; }
+  .sugg small { color:var(--muted); display:block; }
+  .btns { display:flex; gap:8px; margin-top:8px; }
+  button { border:0; border-radius:10px; padding:10px 14px; font-size:15px; font-weight:700; cursor:pointer; background:var(--accent); color:#04121c; }
+  button.ghost { background:#24313f; color:var(--text); }
+  button:disabled { opacity:.4; cursor:default; }
+  .bottom { position:absolute; left:12px; right:12px; bottom:12px; z-index:1000; max-width:460px; display:none; }
+  .instr { font-size:20px; font-weight:700; }
+  .meta i { font-style:normal; }
+  .meta { color:var(--muted); margin-top:4px; font-size:14px; display:flex; gap:14px; flex-wrap:wrap; }
+  .meta span b { color:var(--text); }
+  .fab { position:absolute; right:12px; bottom:140px; z-index:1000; display:flex; flex-direction:column; gap:8px; align-items:flex-end; }
+  .fab .tray { display:none; flex-direction:column; gap:6px; }
+  .fab .tray.open { display:flex; }
+  .fab .tray button { background:var(--panel); color:var(--text); font-weight:600; text-align:left; }
+  .fab .tray button.sel { outline:2px solid var(--accent); }
+  .overlay { position:absolute; inset:0; z-index:2000; background:#000a; display:none; align-items:center; justify-content:center; padding:16px; }
+  .overlay.show { display:flex; }
+  .card { background:var(--panel); border-radius:16px; padding:22px; max-width:360px; width:100%; text-align:center; box-shadow:0 10px 40px #000a; }
+  .spinner { width:44px; height:44px; border:5px solid #334; border-top-color:var(--accent); border-radius:50%; margin:0 auto 14px; animation:spin 1s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .stars { font-size:34px; letter-spacing:4px; cursor:pointer; margin:10px 0; }
+  .stars span:hover, .stars span.on { filter:none; }
+  .stars span { filter:grayscale(1); }
+  .toast { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:2500; background:var(--panel); padding:14px 18px; border-radius:12px; box-shadow:0 10px 40px #000a; display:none; max-width:320px; text-align:center; font-weight:600; }
+  .emoji-icon { font-size:28px; line-height:1; text-shadow:0 2px 6px #0009; }
+  .car { width:44px; height:44px; filter:drop-shadow(0 4px 6px #0008); }
+  body.gag .car path { fill:#ffd400; }
+  .maplibregl-ctrl-attrib { font-size:10px; }
+  body.gag .brand b { color:var(--gag); }
+  .hint { color:var(--muted); font-size:12px; margin-top:6px; }
+  .me-dot { width:18px; height:18px; border-radius:50%; background:#1a73e8; border:3px solid #fff; box-shadow:0 0 0 8px #1a73e833, 0 2px 6px #0006; }
+  body.driving .field, body.driving #routeBtn { display:none; }
+  .navrow { display:flex; gap:8px; align-items:stretch; }
+  .navrow .lanes { flex:1; }
+  .end { width:48px; height:48px; border-radius:50%; padding:0; font-size:20px; background:var(--panel); color:var(--text); box-shadow:0 6px 24px #0008; }
+  /* navigation mode: one compact card on top, map gets the rest of the (portrait) screen */
+  body.driving .top { display:none; }
+  .navbtns { display:none; position:absolute; left:12px; bottom:20px; z-index:1000; gap:8px; align-items:center; }
+  body.driving .navbtns { display:flex; }
+  #tujuNav.on { background:var(--gag); color:#fff; }
+  .langnav { height:40px; padding:0 14px; border-radius:20px; font-size:14px; background:var(--panel); color:var(--text); box-shadow:0 6px 24px #0008; }
+  .zoomctl { display:none; position:absolute; right:12px; top:50%; transform:translateY(-50%); z-index:1000; flex-direction:column; gap:8px; }
+  .zoomctl button { width:44px; height:44px; border-radius:50%; padding:0; font-size:24px; line-height:1; background:var(--panel); color:var(--text); box-shadow:0 6px 24px #0008; }
+  body.driving .zoomctl { display:flex; }
+  body.driving .fab { bottom:20px; }
+  body.driving #bottom { top:10px; bottom:auto; left:10px; right:10px; padding:8px 10px; border-radius:12px; }
+  body.driving .instr { font-size:18px; line-height:1.25; }
+  body.driving .lanes { margin-bottom:6px; }
+  body.driving .lane { height:34px; font-size:20px; max-width:42px; }
+  body.driving .light { margin-bottom:6px; padding:4px 8px; gap:6px; font-size:13px; }
+  body.driving .light .bulb { width:16px; height:16px; }
+  body.driving .light .secs { font-size:16px; }
+  body.driving .lane-hint { margin:0 0 6px; padding:3px 8px; font-size:13px; }
+  body.driving .meta { margin-top:2px; font-size:12px; gap:10px; }
+  .lanes { display:flex; gap:4px; margin-bottom:8px; }
+  .lane { flex:1; max-width:52px; height:44px; border-radius:8px; background:#24313f; color:#5d7084; display:flex; align-items:center; justify-content:center; font-size:26px; font-weight:700; }
+  .lane.ok { background:var(--accent); color:#04121c; }
+  .lane { position:relative; }
+  .lane.me { box-shadow:inset 0 0 0 3px #fff; }
+  .lane.me::after { content:""; position:absolute; bottom:4px; left:50%; width:10px; height:10px; margin-left:-5px; border-radius:50%; background:#fff; box-shadow:0 0 0 2px #04121c; }
+  .lane-hint { display:none; margin:-2px 0 8px; padding:6px 10px; border-radius:8px; font-weight:700; font-size:15px; }
+  .lane-hint.move { display:block; background:#ffb020; color:#1a1200; }
+  .lane-hint.good { display:block; background:#1f7a4d; color:#fff; }
+  .light { display:none; align-items:center; gap:10px; margin-bottom:8px; padding:8px 10px; border-radius:10px; background:#0f1720; font-weight:700; }
+  .light .bulb { width:22px; height:22px; border-radius:50%; }
+  .light .secs { font-size:22px; font-variant-numeric:tabular-nums; margin-left:auto; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div class="top">
+  <div class="bar">
+    <div class="brand">
+      <div><b id="brandName">SeTuJu</b><small id="brandTag"></small></div>
+      <select id="langSel" aria-label="Language"><option value="en">EN</option><option value="ms">BM</option><option value="zh">中文</option><option value="ta">தமிழ்</option></select>
+      <label class="switch" style="display:none"><input type="checkbox" id="gagToggle"><span class="track"></span><span data-i18n="gagLabel"></span></label>
+    </div>
+    <div class="field"><input id="fromInput" data-i18n-ph="from" autocomplete="off"><div class="sugg" id="fromSugg" hidden></div></div>
+    <div class="field"><input id="toInput" data-i18n-ph="to" autocomplete="off"><div class="sugg" id="toSugg" hidden></div></div>
+    <div class="btns">
+      <button id="routeBtn" disabled data-i18n="findRoute"></button>
+      <button id="driveBtn" class="ghost" disabled></button>
+    </div>
+  </div>
+</div>
+
+<div class="fab">
+  <div class="tray" id="tray">
+    <button data-h="🕳️"></button>
+    <button data-h="🐄"></button>
+    <button data-h="🌊"></button>
+    <button data-h="🚧"></button>
+    <button data-h="👮"></button>
+  </div>
+  <button id="reportBtn" data-i18n="report"></button>
+</div>
+
+<div class="bottom bar" id="bottom">
+  <div class="navrow"><div class="lanes" id="lanes"></div>
+  <div class="light" id="light"><div class="bulb" id="bulb"></div><span id="lightDist"></span><span class="secs" id="lightSecs"></span></div></div>
+  <div class="lane-hint" id="laneHint"></div>
+  <div class="instr" id="instr">—</div>
+  <div class="meta"><span><i data-i18n="eta"></i> <b id="eta">—</b></span><span><i data-i18n="dist"></i> <b id="dist">—</b></span><span><i data-i18n="speed"></i> <b id="speed">0</b> <i data-i18n="kmh"></i></span><span id="via"></span></div>
+</div>
+
+<div class="overlay" id="recalc"><div class="card"><div class="spinner"></div><div id="recalcMsg"></div></div></div>
+
+<div class="overlay" id="rate"><div class="card">
+  <div style="font-size:18px;font-weight:700" data-i18n="rateTitle"></div>
+  <div class="hint" style="font-size:14px" data-i18n="rateBody"></div>
+  <div class="stars" id="stars"><span>⭐</span><span>⭐</span><span>⭐</span><span>⭐</span><span>⭐</span></div>
+  <div class="hint" data-i18n="rateHint"></div>
+</div></div>
+
+<div class="navbtns"><button class="end" id="endBtn" aria-label="End navigation">✕</button><button class="langnav" id="langNav" aria-label="Language"></button><button class="langnav" id="tujuNav" aria-label="TuJu Mode">🤡 TuJu</button></div>
+<div class="zoomctl"><button id="zoomIn" aria-label="Zoom in">+</button><button id="zoomOut" aria-label="Zoom out">−</button></div>
+
+<div class="toast" id="toast"></div>
+
+<!-- leaflet kept only for geometry helpers (latLng, bounds, closestPointOnSegment); MapLibre draws the map -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="i18n.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const PUTRAJAYA = [2.9264, 101.6964];
+const SEA = [2.75, 100.85]; // Selat Melaka
+const STATES = [
+  ['Perlis', 6.44, 100.20], ['Kelantan', 6.12, 102.24], ['Sabah', 5.98, 116.07],
+  ['Sarawak', 1.55, 110.35], ['Terengganu', 5.33, 103.14], ['Johor', 1.49, 103.74], ['Pahang', 3.81, 103.33]
+];
+const GOV = [ // sub-labels come from i18n 'gov' by index
+  { name:'Perdana Putra', lat:2.9300, lon:101.6740 },
+  { name:'Parlimen Malaysia', lat:3.1497, lon:101.6913 },
+  { name:'Jabatan Pengangkutan Jalan', lat:2.9213, lon:101.6890 },
+  { name:'Kompleks Kementerian Kewangan', lat:2.9190, lon:101.6935 },
+  { name:'Istana Kehakiman', lat:2.9406, lon:101.6834 }
+];
+
+const FALLBACK = { name:'ASB Campus', lat:3.1550721, lon:101.6924545 }; // demo venue: used when location is denied/unavailable
+let gag = false, from = null, to = null;
+let route = null, line = null, car = null, destMarker = null, sim = null, pending = null;
+
+// OpenFreeMap: free vector tiles, no key, style includes 3D building extrusions
+const map = new maplibregl.Map({ container:'map', style:'https://tiles.openfreemap.org/styles/liberty', center:[FALLBACK.lon, FALLBACK.lat], zoom:12, attributionControl:{ compact:true } });
+// 'style.load' = layers can be added; 'load' waits for the first tiles and never fires if we start moving the camera first
+let mapReady = false;
+map.on('style.load', () => { mapReady = true; });
+const toLL = x => Array.isArray(x) ? [x[1], x[0]] : [x.lng, x.lat];
+function mk(ll, e, cls = 'emoji-icon') {
+  const el = document.createElement('div'); el.className = cls; el.innerHTML = e;
+  const m = new maplibregl.Marker({ element: el }).setLngLat(toLL(ll)).addTo(map);
+  m.setLatLng = x => m.setLngLat(toLL(x));
+  return m;
+}
+const CAR_SVG = '<svg width="44" height="44" viewBox="0 0 44 44"><circle cx="22" cy="22" r="20" fill="#fff" opacity=".9"/><path d="M22 6 L34 34 L22 27 L10 34 Z" fill="var(--accent)" stroke="#04121c" stroke-width="1.5" stroke-linejoin="round"/></svg>';
+// 'From' defaults to the device's current location
+let meDot = null, locating = null;
+function locateMe() {
+  $('fromInput').value = t('locating');
+  return locating = new Promise(resolve => {
+    let settled = false;
+    const done = (f, msg) => {
+      if (settled) return; settled = true;
+      from = f; $('fromInput').value = f.name; refreshBtns();
+      meDot?.remove(); meDot = mk([f.lat, f.lon], '', 'me-dot');
+      if (!sim) map.flyTo({ center: [f.lon, f.lat], zoom: 14 });
+      if (msg) toast(msg); resolve();
+    };
+    if (!navigator.geolocation) return done(FALLBACK, t('locFail')(FALLBACK.name));
+    // a permission prompt that never gets answered (e.g. background tab) would otherwise hang forever
+    setTimeout(() => done(FALLBACK, t('locFail')(FALLBACK.name)), 9000);
+    navigator.geolocation.getCurrentPosition(
+      p => done({ name: t('currentLoc'), lat: p.coords.latitude, lon: p.coords.longitude }),
+      () => done(FALLBACK, t('locFail')(FALLBACK.name)),
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
+  });
+}
+locateMe();
+// empty 'From' field offers current location again
+$('fromInput').addEventListener('focus', () => {
+  if ($('fromInput').value.trim() && !$('fromInput').value.startsWith('📍')) return;
+  $('fromInput').value = '';
+  const box = $('fromSugg'); box.innerHTML = `<div>${t('currentLoc')}<small>${t('useGps')}</small></div>`;
+  box.firstChild.onmousedown = () => locateMe(); box.hidden = false;
+});
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const rand = a => a[Math.floor(Math.random() * a.length)];
+
+function toast(msg, ms=2200) { const t=$('toast'); t.textContent=msg; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none', ms); }
+
+// Siri voices if the browser exposes them (Safari on some Apple devices), then Premium/Enhanced, then named defaults; never novelty voices
+const NOVELTY = /Albert|Bad News|Bahh|Bells|Boing|Bubbles|Cellos|Eddy|Flo|Fred|Good News|Grandma|Grandpa|Jester|Junior|Kathy|Organ|Ralph|Reed|Rocko|Sandy|Shelley|Superstar|Trinoids|Whisper|Wobble|Zarvox/i;
+function pickVoice() {
+  const all = speechSynthesis.getVoices().filter(v => t('voice').test(v.lang) && !NOVELTY.test(v.name));
+  return all.find(v => /siri/i.test(v.name)) || all.find(v => /premium|enhanced/i.test(v.name))
+    || t('voices').map(n => all.find(v => v.name.startsWith(n))).find(Boolean) || all[0];
+}
+// reroute cue: short rising three-note chime, synthesized (no audio file / licence needed)
+let audioCtx = null;
+function rerouteChime() {
+  try {
+    audioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
+    const t0 = audioCtx.currentTime;
+    [659, 880, 1175].forEach((f, i) => {
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain(), t = t0 + i * .12;
+      o.type = 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(.25, t + .02); g.gain.exponentialRampToValueAtTime(.001, t + .45);
+      o.connect(g).connect(audioCtx.destination); o.start(t); o.stop(t + .5);
+    });
+  } catch { /* audio blocked until the page has had a user gesture */ }
+}
+function say(text) {
+  if (!('speechSynthesis' in window)) return;
+  const u = new SpeechSynthesisUtterance(text);
+  const v = pickVoice();
+  if (v) u.voice = v; u.lang = v?.lang || t('locale');
+  speechSynthesis.speak(u);
+}
+
+// ---------- search ----------
+function setupSearch(inputId, suggId, onPick) {
+  const input = $(inputId), box = $(suggId); let timer;
+  input.addEventListener('input', () => {
+    clearTimeout(timer);
+    const q = input.value.trim();
+    if (q.length < 3) { box.hidden = true; return; }
+    timer = setTimeout(async () => {
+      let items;
+      if (gag) items = GOV.map((g, i) => ({ ...g, sub: t('gov')[i] }));
+      else {
+        try {
+          // shortcut: public Nominatim, ~1 req/s limit; fine for a demo, swap for a paid geocoder if real traffic
+          const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=my&q=${encodeURIComponent(q)}`);
+          items = (await r.json()).map(x => ({ name:x.display_name.split(',')[0], sub:x.display_name.split(',').slice(1,3).join(','), lat:+x.lat, lon:+x.lon }));
+        } catch { items = []; }
+      }
+      box.innerHTML = '';
+      if (!items.length) box.innerHTML = `<div><small>${t('noResults')}</small></div>`;
+      items.forEach(it => {
+        const d = document.createElement('div');
+        d.innerHTML = `${it.name}<small>${it.sub || ''}</small>`;
+        d.onclick = () => { input.value = it.name; box.hidden = true; onPick(it); };
+        box.appendChild(d);
+      });
+      box.hidden = false;
+    }, 600);
+  });
+  input.addEventListener('blur', () => setTimeout(() => box.hidden = true, 200));
+}
+setupSearch('fromInput', 'fromSugg', it => { from = it; refreshBtns(); });
+setupSearch('toInput', 'toSugg', it => {
+  to = it;
+  destMarker?.remove(); destMarker = mk([it.lat, it.lon], '🏁');
+  map.flyTo({ center: [it.lon, it.lat], zoom: 14, pitch: 0, bearing: 0 }); refreshBtns();
+});
+function refreshBtns() {
+  $('routeBtn').disabled = !(from && to); $('driveBtn').disabled = !route;
+  $('driveBtn').textContent = sim ? t('stop') : t('start');
+  document.body.classList.toggle('driving', !!sim);
+}
+
+// ---------- routing ----------
+function stepText(s) {
+  const m = s.maneuver, road = s.name || '';
+  if (m.type === 'depart') return t('depart')(road);
+  if (m.type === 'arrive') return t('arrived');
+  if (m.type === 'roundabout' || m.type === 'rotary') return t('roundabout')(m.exit || 1, road);
+  return t('turn')(t('mod')[m.modifier] || t('cont'), road);
+}
+
+async function recalcOverlay(ms) {
+  $('recalcMsg').textContent = rand(t('recalcMsgs')); $('recalc').classList.add('show');
+  await sleep(ms); $('recalc').classList.remove('show');
+}
+
+async function findRoute() {
+  if (!from) await locating;
+  stopSim();
+  if (gag) await recalcOverlay(2200);
+  const pts = [[from.lon, from.lat], ...(gag ? [[PUTRAJAYA[1], PUTRAJAYA[0]]] : []), [to.lon, to.lat]];
+  $('routeBtn').disabled = true; $('routeBtn').textContent = t('searching');
+  try {
+    const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${pts.map(p => p.join(',')).join(';')}?overview=full&geometries=geojson&steps=true`);
+    const data = await r.json();
+    if (data.code !== 'Ok') throw new Error(data.code);
+    buildRoute(data.routes[0]);
+  } catch (e) { toast(t('routeFail')); }
+  $('routeBtn').textContent = t('findRoute'); refreshBtns();
+}
+
+function buildRoute(r) {
+  // flatten step geometries into one path; remember distance where each step starts
+  const path = [], cum = [], steps = [];
+  let d = 0;
+  r.legs.flatMap(l => l.steps).forEach(s => {
+    steps.push({ get text() { return stepText(s); }, at: d, mod: s.maneuver.modifier || '', type: s.maneuver.type, done:false, lanes: s.intersections?.[0]?.lanes });
+    s.geometry.coordinates.forEach(([lon, lat]) => {
+      const p = L.latLng(lat, lon);
+      if (path.length) d += path[path.length - 1].distanceTo(p);
+      path.push(p); cum.push(d);
+    });
+  });
+  route?.layers.forEach(l => l.remove());
+  route = { id: Date.now(), path, cum, steps, total: d, duration: r.duration, signals: [], layers: [], hazards: [] };
+  // every intersection the route passes, with all roads leaving it (lets the simulator take any real turning)
+  route.junctions = [];
+  let lastAt = 0;
+  r.legs.flatMap(l => l.steps).flatMap(s => s.intersections || []).forEach(x => {
+    if (x.in == null || !x.bearings) return;
+    const ll = L.latLng(x.location[1], x.location[0]), m = matchToRoute(route, ll, lastAt - 20, lastAt + 3000);
+    if (m.best > 15) return;
+    lastAt = m.at;
+    route.junctions.push({ at: m.at, lat: ll.lat, lng: ll.lng, bearings: x.bearings, entry: x.entry, in: x.in, out: x.out });
+  });
+  loadSignals(route);
+  drawLine(path);
+  overview();
+  car?.remove();
+  car = new maplibregl.Marker({ element: Object.assign(document.createElement('div'), { className: 'car', innerHTML: CAR_SVG }), rotationAlignment: 'map', pitchAlignment: 'map' }).setLngLat(toLL(path[0])).addTo(map);
+  car.setLatLng = x => car.setLngLat(toLL(x));
+  $('bottom').style.display = 'block';
+  $('instr').textContent = steps[0].text;
+  $('via').innerHTML = gag ? t('via') : '';
+  updateMeta(0);
+}
+
+function posAt(dist) {
+  const { path, cum } = route;
+  let i = cum.findIndex(c => c >= dist); if (i <= 0) return path[Math.max(i, 0)];
+  const t = (dist - cum[i-1]) / ((cum[i] - cum[i-1]) || 1);
+  return L.latLng(path[i-1].lat + (path[i].lat - path[i-1].lat) * t, path[i-1].lng + (path[i].lng - path[i-1].lng) * t);
+}
+
+function updateMeta(dist) {
+  const left = route.total - dist;
+  $('dist').textContent = left > 1000 ? (left / 1000).toFixed(1) + ' km' : Math.round(left) + ' m';
+  if (gag) {
+    const grow = sim ? Math.round(route.duration / 60 + (Date.now() - sim.start) / 1000) : Math.round(route.duration / 60);
+    $('eta').textContent = Math.floor(Date.now() / 3000) % 2 ? t('inshallah') : `${grow} min`;
+  } else {
+    const mins = Math.round(route.duration * (left / route.total) / 60);
+    const at = new Date(Date.now() + mins * 60000);
+    $('eta').textContent = `${mins} min (${at.toLocaleTimeString(t('locale'), { hour:'2-digit', minute:'2-digit' })})`;
+  }
+}
+
+// ---------- lane guidance (Amap-style) ----------
+let curLanes = null;
+const ARROW = { left:'↰', 'sharp left':'↰', 'slight left':'↖', straight:'↑', none:'↑', 'slight right':'↗', right:'↱', 'sharp right':'↱', uturn:'↶' };
+function renderLanes(step) {
+  const box = $('lanes');
+  if (!step || ['depart', 'arrive'].includes(step.type) || !step.mod) { box.innerHTML = ''; curLanes = null; laneHint(null); return; }
+  let lanes = step.lanes;
+  if (gag) lanes = step.gagLanes ||= Array.from({ length: 4 }, () => ({ indications: [rand(Object.keys(ARROW))], valid: Math.random() < .3 }));
+  else if (!lanes?.length) {
+    // no OSM lane data here: synthesize 3 lanes, highlight the side matching the turn
+    const side = step.mod.includes('left') ? 0 : step.mod.includes('right') ? 2 : 1;
+    lanes = ['left', 'straight', 'right'].map((ind, i) => ({ indications: [ind], valid: i === side || (side === 1 && i === 1) }));
+  }
+  curLanes = lanes;
+  // current lane comes from the position feed (simulator); device GPS can't tell lanes, so no hint then
+  const n = lanes.length, me = fix?.lane == null ? null : Math.max(0, Math.min(n - 1, Math.round(fix.lane * (n - 1) / Math.max(1, (fix.lanes || n) - 1))));
+  box.innerHTML = lanes.map((l, i) => `<div class="lane ${l.valid ? 'ok' : ''} ${i === me ? 'me' : ''}">${l.indications.map(i => ARROW[i] || '↑').join('')}</div>`).join('');
+  laneHint(lanes, me);
+}
+
+function laneHint(lanes, me) {
+  const el = $('laneHint');
+  const valid = (lanes || []).map((l, i) => l.valid ? i : -1).filter(i => i >= 0);
+  if (me == null || !valid.length) { el.className = 'lane-hint'; sim && (sim.laneKey = null); return; }
+  const target = valid.reduce((a, b) => Math.abs(b - me) < Math.abs(a - me) ? b : a), diff = target - me;
+  const text = diff === 0 ? '✓ ' + t('laneOk') : (diff > 0 ? '➡️ ' + t('laneR')(diff) : '⬅️ ' + t('laneL')(-diff));
+  el.className = 'lane-hint ' + (diff ? 'move' : 'good'); el.textContent = text;
+  // speak only when the advice changes
+  const key = `${curLanes.length}:${target}:${diff}`;
+  if (sim && diff && sim.laneKey !== key) { sim.laneKey = key; say(text.slice(3)); }
+  if (sim && !diff) sim.laneKey = key;
+}
+
+// ---------- traffic lights (synced countdown) ----------
+let signalsKV;
+async function loadSignals(r) {
+  const b = L.latLngBounds(r.path);
+  const q = `[out:json][timeout:15];node["highway"="traffic_signals"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});out;`;
+  // Klang Valley signals are pre-fetched into signals.json (Overpass often takes 30s+); live query only outside it
+  let nodes;
+  if (L.latLngBounds([2.70, 101.30], [3.40, 101.95]).contains(b)) {
+    signalsKV ||= fetch('signals.json').then(r => r.json()).then(a => a.map(([id, lat, lon]) => ({ id, lat, lon })));
+    nodes = (await signalsKV).filter(n => b.pad(.02).contains([n.lat, n.lon]));
+  }
+  try { nodes ||= JSON.parse(localStorage.getItem(q)); } catch {}
+  for (const host of ['https://overpass-api.de', 'https://overpass.kumi.systems']) {
+    if (nodes) break;
+    try {
+      const res = await fetch(host + '/api/interpreter', { method: 'POST', body: 'data=' + encodeURIComponent(q), signal: AbortSignal.timeout(12000) });
+      nodes = (await res.json()).elements;
+      try { localStorage.setItem(q, JSON.stringify(nodes.map(({ id, lat, lon }) => ({ id, lat, lon })))); } catch {}
+    } catch { /* try next mirror */ }
+  }
+  if (!nodes || r !== route) return;
+  const sigs = [];
+  nodes.forEach(n => {
+    const { best, at } = matchToRoute(r, L.latLng(n.lat, n.lon));
+    if (best < 20 && !sigs.some(s => Math.abs(s.at - at) < 80)) sigs.push({ id: n.id, at, ll: L.latLng(n.lat, n.lon) });
+  });
+  r.signals = sigs.sort((a, b) => a.at - b.at);
+  r.signals.forEach(s => r.layers.push(mk(s.ll, '🚦')));
+}
+
+// closest route segment to a point, in z17 pixels (~1 m/px near the equator); returns distance off-route and distance along it
+function matchToRoute(r, ll, lo = -Infinity, hi = Infinity) {
+  const proj = x => L.CRS.EPSG3857.latLngToPoint(L.latLng(x), 17);
+  r.px ||= r.path.map(proj);
+  const px = r.px, p = proj(ll);
+  let best = Infinity, at = 0;
+  for (let i = 1; i < px.length; i++) {
+    if (r.cum[i] < lo || r.cum[i-1] > hi) continue;
+    const c = L.LineUtil.closestPointOnSegment(p, px[i-1], px[i]), dd = c.distanceTo(p);
+    if (dd < best) { best = dd; at = r.cum[i-1] + c.distanceTo(px[i-1]) / (px[i].distanceTo(px[i-1]) || 1) * (r.cum[i] - r.cum[i-1]); }
+  }
+  return { best, at };
+}
+
+// shortcut: real signal timings aren't public in MY; phase comes from wall clock + node id, so every device shows the same countdown
+const CYCLE = 14, GREEN = 6, YELLOW = 2;
+function lightState(id) {
+  const t = (Date.now() / 1000 + id % CYCLE) % CYCLE;
+  if (t < GREEN) return { color: '#2ecc71', left: GREEN - t, go: true };
+  if (t < GREEN + YELLOW) return { color: '#f1c40f', left: GREEN + YELLOW - t, go: false };
+  return { color: '#e74c3c', left: CYCLE - t, go: false };
+}
+function nextSignal(dist) { return route.signals.find(s => s.at > dist - 5); }
+function renderLight(dist) {
+  const s = nextSignal(dist), el = $('light');
+  if (!s || s.at - dist > 300) { el.style.display = 'none'; return null; }
+  const st = lightState(s.id);
+  el.style.display = 'flex';
+  if (gag && Date.now() - (renderLight.last || 0) < 700) return { s, st };
+  renderLight.last = Date.now();
+  $('bulb').style.background = gag ? rand(['#e74c3c', '#2ecc71', '#9b59b6', '#f1c40f']) : st.color;
+  $('lightDist').textContent = `🚦 ${Math.max(0, Math.round(s.at - dist))} m`;
+  $('lightSecs').textContent = gag ? rand(t('lightGag')) : Math.ceil(st.left) + 's';
+  return { s, st };
+}
+
+// ---------- camera: 2D overview when planning, 3D heading-up when driving ----------
+function drawLine(path) {
+  // isStyleLoaded() is also false while tiles stream in (i.e. most of a drive), and 'load' never fires twice: use our own flag
+  if (!mapReady) return map.once('style.load', () => drawLine(route ? route.path : path));
+  const data = { type: 'Feature', geometry: { type: 'LineString', coordinates: path.map(toLL) } };
+  if (map.getSource('route')) map.getSource('route').setData(data);
+  else {
+    map.addSource('route', { type: 'geojson', data });
+    // the abandoned route after a reroute: faded and dashed underneath the new one
+    map.addSource('route-old', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    map.addLayer({ id: 'route-old', type: 'line', source: 'route-old', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#8a96a3', 'line-width': 6, 'line-opacity': .7, 'line-dasharray': [1.5, 1.5] } });
+    map.addLayer({ id: 'route-casing', type: 'line', source: 'route', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#ffffff', 'line-width': 13 } });
+    map.addLayer({ id: 'route-line', type: 'line', source: 'route', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#1aa3ff', 'line-width': 8 } });
+  }
+  map.setPaintProperty('route-line', 'line-color', gag ? '#ff3b6b' : '#1a73e8');
+}
+
+function overview() {
+  const b = L.latLngBounds(route.path);
+  map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
+  map.fitBounds([[b.getWest(), b.getSouth()], [b.getEast(), b.getNorth()]], { padding: { top: 250, bottom: 170, left: 40, right: 40 }, pitch: 0, bearing: 0, duration: 800 });
+}
+
+function bearingAt(d) {
+  const a = posAt(Math.max(0, d - 15)), b = posAt(Math.min(route.total, d + 35));
+  const r = Math.PI / 180, dl = (b.lng - a.lng) * r;
+  return Math.atan2(Math.sin(dl) * Math.cos(b.lat * r), Math.cos(a.lat * r) * Math.sin(b.lat * r) - Math.sin(a.lat * r) * Math.cos(b.lat * r) * Math.cos(dl)) / r;
+}
+
+// ---------- zoom during navigation ----------
+// buttons move a target; follow() eases toward it each tick (~0.5 s) so zoom glides instead of jumping
+let navZoom = 16.5, navZoomTarget = 16.5;
+$('zoomIn').onclick = () => { navZoomTarget = Math.min(18.5, navZoomTarget + .75); };
+$('zoomOut').onclick = () => { navZoomTarget = Math.max(14, navZoomTarget - .75); };
+
+// ---------- see-through buildings over the car ----------
+// fill-extrusion opacity can't vary per feature, so obstructing buildings move to a faded copy of the layer
+let ghostIds = [], ghostAt = 0;
+function setupGhost() {
+  const b = map.getStyle().layers.find(l => l.id === 'building-3d');
+  if (!b || map.getLayer('building-ghost')) return;
+  const base = b.filter || ['all'];
+  map.addLayer({ ...b, id: 'building-ghost', paint: { ...b.paint, 'fill-extrusion-opacity': .22 }, filter: ['all', base, ['in', ['id'], ['literal', []]]] }, 'building-3d');
+  map.__ghostBase = base;
+}
+function updateGhost(p) {
+  if (performance.now() - ghostAt < 250 || !map.getLayer('building-3d')) return;
+  ghostAt = performance.now();
+  setupGhost();
+  const c = map.project(toLL(p));
+  // anything drawn over the car arrow or just in front of it
+  const hits = map.queryRenderedFeatures([[c.x - 30, c.y - 40], [c.x + 30, c.y + 25]], { layers: ['building-3d', 'building-ghost'] });
+  const ids = [...new Set(hits.map(f => f.id).filter(id => id != null))].sort();
+  if (ids.join() === ghostIds.join()) return;
+  ghostIds = ids;
+  map.setFilter('building-3d', ['all', map.__ghostBase, ['!', ['in', ['id'], ['literal', ids]]]]);
+  map.setFilter('building-ghost', ['all', map.__ghostBase, ['in', ['id'], ['literal', ids]]]);
+}
+
+function follow(p) {
+  // ease bearing toward road heading, shortest way round, so the camera doesn't snap at each vertex
+  const diff = ((bearingAt(sim.dist) - sim.bearing + 540) % 360) - 180;
+  sim.bearing = (sim.bearing + diff * .15 + 360) % 360;
+  car.setRotation(sim.bearing);
+  navZoom += (navZoomTarget - navZoom) * .12;
+  const wobble = gag ? Math.sin(Date.now() / 700) * 25 : 0; // TuJu camera is "a bit" unsteady
+  // jumpTo, not easeTo: a new ease every tick cancels the last one and the camera never catches up
+  map.jumpTo({ center: toLL(p), bearing: sim.bearing + wobble, pitch: 60, zoom: navZoom,
+    // card sits on top now: keep the car in the lower part of the free map area
+    padding: { top: $('bottom').offsetHeight + map.getContainer().clientHeight * .3, bottom: 70, left: 0, right: 0 } });
+}
+
+// ---------- position source: device GPS, or the driver simulator (demo.html) ----------
+// BroadcastChannel: same-origin tabs/iframes only, so the driver sim must run in the same browser
+const bc = 'BroadcastChannel' in window ? new BroadcastChannel('takju') : null;
+// inst: lets the simulator ignore other open copies of the app on the same channel
+const inst = Math.random().toString(36).slice(2);
+const emit = (kind, text = '') => bc?.postMessage({ t: 'event', inst, kind, text, gag, lang });
+const sendRoute = () => bc && route && bc.postMessage({ t: 'route', inst, id: route.id, path: route.path.map(p => [p.lat, p.lng]), junctions: route.junctions, lang });
+
+bc && (bc.onmessage = async ({ data: m }) => {
+  if (m.t === 'gps' && m.to && m.to !== inst) return;
+  if (m.t === 'gps') return onFix({ lat: m.lat, lng: m.lng, kmh: m.kmh, lane: m.lane, lanes: m.lanes, src: 'sim' });
+  if (m.t !== 'cmd' || (m.to && m.to !== inst)) return;
+  if (m.kind === 'start') {
+    // the simulated car's position is the start point
+    if (m.from && !sim) { from = { name: m.from.name, lat: m.from.lat, lon: m.from.lng }; $('fromInput').value = from.name; }
+    if (!to) { to = { name: 'KLCC', lat: 3.1579, lon: 101.7123 }; $('toInput').value = to.name; } // demo default: ASB to KLCC
+    if (!route || (m.from && !sim)) await findRoute();
+    if (!sim) startSim();
+    sendRoute();
+  }
+  if (m.kind === 'needRoute') sendRoute();
+  if (m.kind === 'stop') stopSim();
+  if (m.kind === 'gag' && $('gagToggle').checked !== m.v) { $('gagToggle').checked = m.v; $('gagToggle').onchange({ target: $('gagToggle') }); }
+  if (m.kind === 'hazard' && sim) addHazard(m.e, posAt(Math.min(route.total - 20, sim.dist + 350)));
+});
+
+let fix = null, lastSimFix = 0, watchId = null;
+function onFix(f) {
+  if (f.src === 'sim') lastSimFix = Date.now();
+  else if (Date.now() - lastSimFix < 3000) return; // simulator feed overrides the device GPS
+  fix = f;
+}
+
+// ---------- navigation session ----------
+const TICK = 40;
+function startSim() {
+  if (!route) return;
+  route.steps.forEach(s => s.done = false);
+  route.hazards.forEach(h => h.alerted = false);
+  sim = { dist: 0, paused: false, stopped: true, start: Date.now(), nextGag: Date.now() + 6000, ranRed: new Set(), offRoute: 0 };
+  sim.bearing = bearingAt(0);
+  fix = null;
+  if (navigator.geolocation) watchId = navigator.geolocation.watchPosition(
+    p => onFix({ lat: p.coords.latitude, lng: p.coords.longitude, kmh: Math.max(0, (p.coords.speed || 0) * 3.6), src: 'gps' }),
+    () => {}, { enableHighAccuracy: true, maximumAge: 1000 });
+  $('instr').textContent = t('waitGps');
+  sim.timer = setInterval(tick, TICK);
+  refreshBtns(); emit('start'); sendRoute();
+}
+function stopSim() {
+  if (sim) clearInterval(sim.timer);
+  if (watchId != null) navigator.geolocation.clearWatch(watchId);
+  sim = null; watchId = null; speechSynthesis?.cancel(); refreshBtns(); if (route) overview();
+}
+
+async function tick() {
+  if (!sim || !fix) return;
+  if (sim.paused) return broadcast(null);
+  const prev = sim.dist, here = L.latLng(fix.lat, fix.lng);
+  // match only near where we were, so overlapping route sections don't make us jump ahead
+  const m = matchToRoute(route, here, prev - 80, prev + 600);
+  // ~1 s clearly off the route (25 ticks × 40 ms) → recalculate from where the car is
+  if (m.best > 45) { if (++sim.offRoute > 25 && !sim.rerouting) return reroute(here); }
+  else { sim.offRoute = 0; sim.dist = Math.max(prev, m.at); }
+  sim.stopped = (fix.kmh || 0) < 1;
+
+  const light = renderLight(sim.dist);
+  if (light && !light.st.go && !gag && prev < light.s.at && sim.dist >= light.s.at && !sim.ranRed.has(light.s.id)) {
+    sim.ranRed.add(light.s.id);
+    say(t('ranRedSay')); emit('ranRed');
+  }
+  renderLanes(route.steps.find(s => !s.done && s.at - sim.dist < 500));
+  const p = m.best > 60 ? here : posAt(sim.dist);
+  car.setLatLng(p); follow(p); updateGhost(p);
+  updateMeta(sim.dist);
+  checkHazards();
+  broadcast(light);
+
+  const step = route.steps.find(s => !s.done && s.at <= sim.dist + 30);
+  if (step) { step.done = true; await announce(step); }
+
+  if (gag && Date.now() > sim.nextGag && sim.dist < route.total * .9) {
+    sim.nextGag = Date.now() + 7000 + Math.random() * 5000;
+    await rand([gagRecalc, gagSea, gagFlip])();
+  }
+  if (sim && sim.dist >= route.total - 15) arrive();
+}
+
+async function reroute(here) {
+  sim.rerouting = true;
+  rerouteChime(); setTimeout(() => say(t('offRoute')), 500); toast('🔄 ' + t('offRoute')); emit('reroute');
+  const oldPath = route.path, keepFix = fix;
+  map.getSource('route-old')?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: oldPath.map(toLL) } });
+  from = { name: t('currentLoc'), lat: here.lat, lon: here.lng }; $('fromInput').value = from.name;
+  await findRoute(); // draws the new route as the current one and frames it in 2D
+  map.setPaintProperty('route-line', 'line-color', '#1a73e8'); // the new suggested route, in blue
+  startSim();
+  fix = keepFix; // keep the last position so the view doesn't flash "waiting for GPS"
+  // highlight the new route (pulse) while driving carries on
+  toast('🆕 ' + t('newRoute')((route.total / 1000).toFixed(1)), 2500);
+  for (let i = 0; i < 6; i++) { map.setPaintProperty('route-line', 'line-width', i % 2 ? 8 : 14); await sleep(400); }
+  map.setPaintProperty('route-line', 'line-width', 8);
+  setTimeout(() => map.getSource('route-old')?.setData({ type: 'FeatureCollection', features: [] }), 4000);
+}
+
+function broadcast(light) {
+  if (!bc || !sim) return;
+  const kmh = sim.paused ? 0 : fix?.kmh || 0;
+  $('speed').textContent = Math.round(kmh);
+  bc.postMessage({
+    t: 'state', inst, lang, gag, routeId: route.id, dist: sim.dist, total: route.total, kmh, stopped: sim.paused || sim.stopped, paused: sim.paused,
+    instr: $('instr').textContent, lanes: curLanes,
+    light: light && { d: light.s.at - sim.dist, color: $('bulb').style.background, secs: $('lightSecs').textContent, go: light.st.go, id: light.s.id },
+    hazards: route.hazards.filter(h => h.at > sim.dist - 20 && h.at - sim.dist < 400).map(h => ({ e: h.e, d: h.at - sim.dist, id: h.id }))
+  });
+}
+
+async function announce(step) {
+  sim.curStep = step;
+  $('instr').textContent = step.text;
+  if (step.type === 'arrive') return;
+  say(step.text); emit('instr', step.text);
+  if (!gag) return;
+  // popup once per drive, otherwise demo stalls on every right turn
+  if (step.mod.includes('right') && !sim.rated) { sim.rated = true; await gagRate(); }
+  else if (Math.random() < .5) gagFlip();
+}
+
+function arrive() {
+  stopSim();
+  const msg = gag ? t('arriveGagMsg') : t('arriveMsg');
+  $('instr').textContent = gag ? t('arrivedGagShort') : t('arrivedShort');
+  say(msg); toast(msg, 4000); emit('arrive', msg);
+}
+
+// ---------- gags ----------
+async function pauseFor(fn) { if (!sim) return; sim.paused = true; await fn(); if (sim) sim.paused = false; }
+
+const gagRecalc = () => { emit('recalc'); return pauseFor(() => recalcOverlay(2500)); };
+
+const gagFlip = () => {
+  const extra = rand(t('flips'));
+  $('instr').textContent += ' … ' + extra;
+  say(extra); emit('flip', extra);
+};
+
+const gagSea = () => pauseFor(async () => {
+  const [name, lat, lon] = rand(STATES);
+  emit('sea');
+  car.setLatLng(SEA); map.flyTo({ center: toLL(SEA), zoom: 8, pitch: 0, bearing: 0, duration: 1000 });
+  say(t('seaSay')); toast(t('seaToast'), 2000);
+  await sleep(2200);
+  map.flyTo({ center: [lon, lat], zoom: 9, duration: 1000 }); toast(t('welcome')(name), 2000); emit('teleport', name);
+  await sleep(2200);
+  map.flyTo({ center: toLL(posAt(sim?.dist || 0)), zoom: 16.5, pitch: 60, bearing: sim?.bearing || 0, duration: 1000 }); await sleep(1100);
+});
+
+const gagRate = () => pauseFor(() => new Promise(resolve => {
+  emit('rate');
+  $('rate').classList.add('show');
+  const spans = [...$('stars').children];
+  const done = i => {
+    $('rate').classList.remove('show'); clearTimeout(auto);
+    if (i === 4) { toast(t('rateOkToast')); say(t('rateOkSay')); }
+    else { toast(t('rateBadToast'), 3000); say(t('rateBadSay')); }
+    emit('rated', i + 1);
+    setTimeout(resolve, 1500);
+  };
+  // nobody tapping (driver sim on the big screen)? the driver "rates" 1 star after 4s
+  const auto = setTimeout(() => done(0), 4000);
+  spans.forEach((s, i) => {
+    s.onmouseenter = () => spans.forEach((x, j) => x.classList.toggle('on', j <= i));
+    s.onclick = () => done(i);
+  });
+}));
+
+// ---------- hazard reports ----------
+let hazard = null, hazardSeq = 0;
+$('reportBtn').onclick = () => $('tray').classList.toggle('open');
+$('tray').querySelectorAll('button').forEach(b => b.onclick = () => {
+  hazard = b.dataset.h; $('tray').classList.remove('open');
+  toast(t('tapToReport')(hazard));
+});
+map.on('click', e => {
+  if (!hazard) return;
+  addHazard(hazard, L.latLng(e.lngLat.lat, e.lngLat.lng));
+  toast(gag ? t('reportedGag') : t('reported')(hazard), 2600);
+  hazard = null;
+});
+function addHazard(e, ll) {
+  const m = mk(ll, e);
+  if (!route) return;
+  route.layers.push(m);
+  const { best, at } = matchToRoute(route, ll);
+  if (best < 40) route.hazards.push({ id: ++hazardSeq, e, at, alerted: false });
+}
+function checkHazards() {
+  const h = route.hazards.find(h => !h.alerted && h.at > sim.dist && h.at - sim.dist < 300);
+  if (!h) return;
+  h.alerted = true;
+  const m = Math.round((h.at - sim.dist) / 10) * 10;
+  const msg = gag ? t('hazardGag')(t('hname')[h.e]) : t('hazard')(t('hname')[h.e], m);
+  say(msg); toast(`${h.e} ${msg}`, 2600); emit('hazard', h.e);
+}
+
+// ---------- buttons & mode ----------
+$('routeBtn').onclick = findRoute;
+$('driveBtn').onclick = () => sim ? stopSim() : startSim();
+$('endBtn').onclick = stopSim;
+$('gagToggle').onchange = e => {
+  gag = e.target.checked;
+  $('tujuNav').classList.toggle('on', gag);
+  document.body.classList.toggle('gag', gag);
+  $('brandName').textContent = gag ? 'TuJu™ (Beta)' : 'SeTuJu';
+  $('brandTag').textContent = gag ? t('tagGag') : t('tagline');
+  if (gag) say(t('gagOn'));
+  emit('gag', gag);
+  const wasDriving = !!sim;
+  // reroute mid-drive from where the car is now, not from the original start
+  if (sim && fix) { from = { name: t('currentLoc'), lat: fix.lat, lon: fix.lng }; $('fromInput').value = from.name; }
+  if (to) findRoute().then(() => wasDriving && startSim());
+};
+
+// ---------- language ----------
+function applyLang() {
+  document.documentElement.lang = lang;
+  $('langSel').value = lang;
+  $('langNav').textContent = '🌐 ' + LANGS.find(([k]) => k === lang)[1];
+  document.querySelectorAll('[data-i18n]').forEach(el => el.innerHTML = t(el.dataset.i18n));
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => el.placeholder = t(el.dataset.i18nPh));
+  $('tray').querySelectorAll('button').forEach(b => b.textContent = `${b.dataset.h} ${t('h')[b.dataset.h]}`);
+  $('brandTag').textContent = gag ? t('tagGag') : t('tagline');
+  if (from?.name?.startsWith('📍')) $('fromInput').value = from.name = t('currentLoc');
+  if (route) { $('via').innerHTML = gag ? t('via') : ''; $('instr').textContent = (sim?.curStep || route.steps[0]).text; }
+  refreshBtns();
+}
+// in navigation the header (and its picker) is hidden: this button cycles languages without leaving the trip
+const LANGS = [['en', 'EN'], ['ms', 'BM'], ['zh', '中文'], ['ta', 'தமிழ்']];
+$('langNav').onclick = () => {
+  const next = LANGS[(LANGS.findIndex(([k]) => k === lang) + 1) % LANGS.length][0];
+  $('langSel').value = next; $('langSel').onchange({ target: $('langSel') });
+  if (sim) { speechSynthesis.cancel(); say($('instr').textContent); } // re-announce in the new language and voice
+};
+// TuJu Mode mid-trip: same as the hidden header switch (reroutes from where the car is now)
+$('tujuNav').onclick = () => { $('gagToggle').checked = !gag; $('gagToggle').onchange({ target: $('gagToggle') }); };
+$('langSel').onchange = e => { lang = e.target.value; try { localStorage.setItem('setuju-lang', lang); } catch {} applyLang(); emit('lang'); };
+applyLang();
+</script>
+</body>
+</html>

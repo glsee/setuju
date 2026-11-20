@@ -1,0 +1,789 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SeTuJu Simulator</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<style>
+  :root { --bg:#0b1118; --panel:#141e29; --text:#eef3f8; --muted:#8fa2b5; --accent:#33ccff; --gag:#ff3b6b; }
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font-family:system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .wrap { display:flex; height:100%; gap:16px; padding:16px; }
+  .sim { flex:1; display:flex; flex-direction:column; gap:12px; min-width:0; }
+  .stage { flex:1; position:relative; border-radius:18px; overflow:hidden; background:#87b7e0; min-height:300px; }
+  /* driver's view: 3D map underneath, street photo on top when one exists for this spot */
+  #fp { position:absolute; inset:0; background:linear-gradient(#5d9ee0 0%, #a9d0f2 45%, #dfeaf2 60%); }
+  .chip.btn { cursor:pointer; border:0; color:var(--text); font:inherit; font-weight:700; font-size:14px; }
+  .photo { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:0; transition:opacity .35s; }
+  .photo.show { opacity:1; }
+  .hood { position:absolute; left:-5%; right:-5%; bottom:-40px; height:120px; background:radial-gradient(ellipse at 50% 0%, #2b3440 0%, #0d1218 70%); border-radius:50% 50% 0 0; box-shadow:0 -6px 20px #0008; }
+  .freshener { position:absolute; top:-4px; left:62%; font-size:34px; transform-origin:top center; animation:swing 2.2s ease-in-out infinite; }
+  @keyframes swing { 0%,100% { transform:rotate(-10deg); } 50% { transform:rotate(12deg); } }
+  .vlight { position:absolute; top:150px; right:16px; display:none; align-items:center; gap:10px; background:#000c; padding:10px 14px; border-radius:14px; font-weight:800; font-size:28px; }
+  .vlight .bulb { width:34px; height:34px; border-radius:50%; box-shadow:0 0 18px currentColor; }
+  .vhaz { position:absolute; left:50%; transform:translate(-50%,-50%); pointer-events:none; filter:drop-shadow(0 6px 8px #0009); }
+  .overlay { position:absolute; inset:0; display:none; align-items:center; justify-content:center; flex-direction:column; gap:8px; font-weight:800; font-size:26px; text-align:center; }
+  .overlay.show { display:flex; }
+  #seaView { background:linear-gradient(#5aa9e6, #1e6fb8 55%, #124a80); font-size:28px; }
+  #seaView .boat { font-size:110px; animation:swing 1.6s ease-in-out infinite; }
+  #thinkView { background:#000b; }
+  .pip { position:absolute; left:14px; bottom:14px; width:220px; height:260px; border-radius:14px; overflow:hidden; border:2px solid #fff3; box-shadow:0 8px 24px #000a; }
+  .pip canvas { width:100%; height:100%; display:block; }
+  .hud { position:absolute; top:12px; left:12px; display:flex; gap:8px; flex-wrap:wrap; }
+  .chip { background:#000a; padding:6px 10px; border-radius:10px; font-weight:700; font-size:14px; }
+  .keys { position:absolute; right:12px; top:12px; background:#000b; border-radius:12px; padding:8px 12px; font-size:13px; line-height:1.7; }
+  .keys kbd { display:inline-block; min-width:22px; text-align:center; background:#fff; color:#111; border-radius:5px; padding:0 5px; font:700 12px system-ui; margin-right:6px; box-shadow:0 2px 0 #999; }
+  .junc { position:absolute; left:50%; bottom:96px; transform:translateX(-50%); display:none; gap:6px; align-items:center; background:#000c; border-radius:12px; padding:6px 12px; font-weight:800; font-size:15px; white-space:nowrap; }
+  .junc .x { display:inline-block; min-width:30px; text-align:center; font-size:24px; color:#fff9; }
+  .junc .x.r { color:#33ccff; }
+  .credit { position:absolute; right:10px; bottom:6px; font-size:10px; color:#fffa; text-shadow:0 1px 2px #000; }
+  .dash { display:grid; grid-template-columns:auto 1fr auto; gap:14px; align-items:center; background:var(--panel); border-radius:18px; padding:14px; }
+  .face { font-size:64px; line-height:1; width:84px; text-align:center; transition:transform .2s; }
+  .face.pop { transform:scale(1.25) rotate(-6deg); }
+  .who { color:var(--muted); font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.5px; }
+  .bubble { background:#fff; color:#111; border-radius:14px; padding:10px 14px; font-size:18px; font-weight:700; position:relative; min-height:46px; margin-top:4px; }
+  .bubble::before { content:""; position:absolute; left:-8px; top:16px; border:8px solid transparent; border-right-color:#fff; border-left:0; }
+  .speedo { text-align:center; }
+  .speedo b { font-size:40px; font-variant-numeric:tabular-nums; display:block; line-height:1; }
+  .speedo small { color:var(--muted); }
+  .controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .controls .grp { display:flex; gap:6px; background:var(--panel); padding:6px; border-radius:12px; align-items:center; }
+  .controls .lbl { color:var(--muted); font-size:12px; padding:0 4px; }
+  button { border:0; border-radius:9px; padding:8px 12px; font-size:14px; font-weight:700; cursor:pointer; background:#24313f; color:var(--text); }
+  button.on, button.go { background:var(--accent); color:#04121c; }
+  button.gag.on { background:var(--gag); color:#fff; }
+  .phone-unused { width:390px; flex:none; border-radius:44px; background:#000; padding:14px; box-shadow:0 20px 60px #000c, inset 0 0 0 2px #333; display:flex; }
+  .phone iframe { border:0; border-radius:32px; width:100%; height:100%; background:#fff; }
+  @media (max-width: 900px) { .wrap { flex-direction:column; height:auto; } .phone { width:100%; height:760px; } .stage { min-height:420px; } .pip { width:150px; height:180px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="sim">
+    <div class="stage" id="stage">
+      <div id="fp"></div>
+      <img class="photo" id="photoA" alt=""><img class="photo" id="photoB" alt="">
+      <div id="vhaz"></div>
+      <div class="junc" id="junc"></div>
+      <div class="hood"><span class="freshener">🌲</span></div>
+      <div class="vlight" id="vlight"><div class="bulb" id="vbulb"></div><span id="vsecs"></span></div>
+      <div class="overlay" id="seaView"><div class="boat">⛵</div><div id="seaText"></div></div>
+      <div class="overlay" id="thinkView"><div id="thinkText"></div></div>
+      <div class="pip"><canvas id="cv"></canvas></div>
+      <div class="hud"><span class="chip" id="chipLight" hidden></span><span class="chip" id="chipLane">—</span><button class="chip btn" id="chipSrc"></button><button class="chip btn" id="chipTime"></button></div>
+      <div class="keys" id="keysLegend"></div>
+      <div class="credit" id="credit">Street imagery © KartaView contributors · Map © OpenStreetMap, OpenFreeMap</div>
+    </div>
+    <div class="dash">
+      <div class="face" id="face">😎</div>
+      <div><div class="who" id="who"></div><div class="bubble" id="bubble" data-i18n="ready"></div></div>
+      <div class="speedo"><b id="kmh">0</b><small data-i18n="kmh"></small></div>
+    </div>
+    <div class="controls">
+      <div class="grp"><button class="go" id="startBtn" data-i18n="start"></button><button id="stopBtn" data-i18n="stop"></button></div>
+      <div class="grp"><span class="lbl" data-i18n="drivers"></span>
+        <button data-p="grab" class="on">😎 Abang Grab</button>
+        <button data-p="rempit">😈 Mat Rempit</button>
+        <button data-p="makcik">👵 Makcik Kiah</button>
+      </div>
+      <div class="grp"><span class="lbl" data-i18n="throw"></span>
+        <button data-h="🐄">🐄</button><button data-h="🕳️">🕳️</button><button data-h="🌊">🌊</button><button data-h="🚧">🚧</button><button data-h="👮">👮</button>
+      </div>
+      <div class="grp"><span class="lbl" data-i18n="laneLbl"></span>
+        <button id="laneL" title="Arrow Left">⬅</button><button id="laneR" title="Arrow Right">➡</button>
+        <button id="laneAuto" class="on" data-i18n="laneAuto"></button>
+      </div>
+      <div class="grp"><button id="modeBtn" class="on"></button></div>
+      <div class="grp"><button class="gag" id="gagBtn" data-i18n="gagMode"></button></div>
+      <div class="grp"><button id="openApp" data-i18n="openApp"></button><span class="lbl" id="appStatus"></span></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const rand = a => a[Math.floor(Math.random() * a.length)];
+const bc = new BroadcastChannel('takju');
+// pinned: the app instance inside our phone frame (other open copies of the app share the channel)
+let pinned = null;
+const cmd = (kind, extra = {}) => bc.postMessage({ t: 'cmd', to: pinned, kind, ...extra });
+
+// ---------- personas (kmh = cruising speed in simulated time) ----------
+const PERSONAS = {
+  // kmh: cruising speed; lat: lateral grip they're comfortable with in a turn (m/s²)
+  grab:   { name:'Abang Grab', face:'😎', kmh:60, lat:2.5, runRed:false },
+  rempit: { name:'Mat Rempit', face:'😈', kmh:100, lat:4.5, runRed:true },
+  makcik: { name:'Makcik Kiah', face:'👵', kmh:35, lat:1.6, runRed:false },
+};
+let persona = 'grab';
+
+// ---------- i18n (lang comes from the nav app on every message) ----------
+let lang = 'en';
+const T = {
+  en: { manual:'Manual', autopilot:'Autopilot', offRoute:'Go off route', offLeft:'Eh, I turn left here lah.', offRight:'Shortcut! Turn right.', offStraight:'Alamak, missed the turn!', noRoad:'No road that way, boss.', rerouted:'SeTuJu recalculated. Phew.',
+    legend:'<kbd>↑</kbd>accelerate <kbd>↓</kbd>brake<br><kbd>←</kbd><kbd>→</kbd>tap: change lane<br><kbd>←</kbd><kbd>→</kbd>hold: turn into next road<br><kbd>A</kbd>autopilot', laneLbl:'Lane', laneAuto:'Auto', openApp:'📱 Open SeTuJu app ↗', linked:'linked', notLinked:'app not open', sim:'sim driver', ready:'Press "Start" when ready, boss.', kmh:'km/h', start:'▶ Start', stop:'■ Stop', gagMode:'🤡 TuJu Mode', drivers:'Driver', throw:'Throw', lane:'Lane', sea:'Strait of Malacca 🐟', thinking:'⏳ TuJu is thinking…', notStarted:'Start driving first, boss.', okDrive:'Okay, I drive nicely.', teleport: n => `Since when I reached ${n}?!`, what:"What's that?!" },
+  ms: { manual:'Manual', autopilot:'Autopilot', offRoute:'Keluar laluan', offLeft:'Eh, saya belok kiri sini lah.', offRight:'Jalan pintas! Belok kanan.', offStraight:'Alamak, terlepas simpang!', noRoad:'Tak ada jalan ke situ, boss.', rerouted:'SeTuJu kira semula. Fuh.',
+    legend:'<kbd>↑</kbd>pecut <kbd>↓</kbd>brek<br><kbd>←</kbd><kbd>→</kbd>tekan: tukar lorong<br><kbd>←</kbd><kbd>→</kbd>tahan: belok ke jalan seterusnya<br><kbd>A</kbd>autopilot', laneLbl:'Lorong', laneAuto:'Auto', openApp:'📱 Buka app SeTuJu ↗', linked:'bersambung', notLinked:'app belum dibuka', sim:'pemandu simulasi', ready:'Tekan "Mula" bila ready, boss.', kmh:'km/j', start:'▶ Mula', stop:'■ Henti', gagMode:'🤡 Mode TuJu', drivers:'Pemandu', throw:'Lempar', lane:'Lorong', sea:'Selat Melaka 🐟', thinking:'⏳ TuJu sedang berfikir…', notStarted:'Mula memandu dulu, boss.', okDrive:'Okay, saya pandu elok-elok.', teleport: n => `Bila masa saya sampai ${n}?!`, what:'Apa tu?!' },
+  zh: { laneLbl:'车道', laneAuto:'自动', openApp:'📱 打开 SeTuJu ↗', linked:'已连接', notLinked:'应用未打开', sim:'模拟司机', ready:'准备好就按“开始”，老板。', kmh:'公里/时', start:'▶ 开始', stop:'■ 停止', gagMode:'🤡 TuJu模式', drivers:'司机', throw:'丢', lane:'车道', sea:'马六甲海峡 🐟', thinking:'⏳ TuJu正在思考…', notStarted:'先开车啦，老板。', okDrive:'好，我会好好开。', teleport: n => `我什么时候到了${n}？！`, what:'那是什么？！' },
+  ta: { laneLbl:'லேன்', laneAuto:'ஆட்டோ', openApp:'📱 SeTuJu app திற ↗', linked:'இணைந்தது', notLinked:'app திறக்கவில்லை', sim:'சிமுலேஷன் டிரைவர்', ready:'ரெடின்னா "தொடங்கு" அழுத்துங்க, பாஸ்.', kmh:'கி.மீ/ம', start:'▶ தொடங்கு', stop:'■ நிறுத்து', gagMode:'🤡 TuJu மோட்', drivers:'டிரைவர்', throw:'வீசு', lane:'லேன்', sea:'மலாக்கா நீரிணை 🐟', thinking:'⏳ TuJu யோசிக்குது…', notStarted:'முதல்ல ஓட்ட ஆரம்பிங்க, பாஸ்.', okDrive:'சரி, நான் பத்திரமா ஓட்டுறேன்.', teleport: n => `நான் எப்போ ${n} வந்தேன்?!`, what:'அது என்ன?!' },
+};
+const tr = k => (T[lang] || T.en)[k] ?? T.en[k];
+function applyLang() {
+  if ($('keysLegend')) $('keysLegend').innerHTML = tr('legend');
+  if ($('modeBtn')) setManual(manual);
+  document.documentElement.lang = lang;
+  document.querySelectorAll('[data-i18n]').forEach(e => e.textContent = tr(e.dataset.i18n));
+  $('who').textContent = `${PERSONAS[persona].name} · ${tr('sim')}`;
+}
+
+// ---------- meme lines ----------
+const LINES_BY_LANG = {
+  ms: {
+    start: ['Bismillah. Jom!', 'Okay boss, gerak.', 'Minyak penuh. Iman pun penuh.'],
+    startGag: ['Ya Allah, TuJu lagi…', 'Doakan saya.', 'Kalau tak balik, sampaikan salam.'],
+    instr: ['Okay boss.', 'Noted.', 'Senang je.'],
+    instrGag: ['Betul ke ni…', 'Saya ikut je lah.', 'Hmm. Hmm. Hmmmm.'],
+    red: ['Lampu merah. Masa scroll TikTok 📱', 'Tunggu… tunggu…', 'Sempat makan karipap.'],
+    ranRed: ['YOLO 🏍️💨', 'Merah tu cadangan je bang.', 'Kamera AWAS? Apa tu?'],
+    lane: ['Tukar lorong, bagi signal. Macam orang beradab.', 'Masuk lorong ikut arahan 👍', 'Lorong betul. Rasa macam China.'],
+    laneRempit: ['Celah sikit… celah sikit…', 'Lorong? Semua lorong saya punya.'],
+    makcik: ['Signal kiri dari Seremban tadi.', 'Lorong kanan ni lorong makcik.', 'Kenapa semua orang hon?'],
+    recalc: ['Server mesyuarat lagi? Saya pun nak mesyuarat.', 'Loading… macam hidup saya.', 'Dah 3 minit. Kereta pun dah sejuk.'],
+    sea: ['Eh, kenapa ada ikan?!', 'Kereta saya bukan kapal selam!', 'TuJu kata ni jalan pintas.'],
+    flip: ['Kiri ke kanan ni bro?!', 'Saya pusing U je lah.', 'Dia pun tak tahu.'],
+    rate: ['Nak belok kanan pun kena bayar?', 'Ini app ke tol?'],
+    rated: ['Satu bintang. Puas hati?', 'Bintang saya simpan untuk Waze.'],
+    arrive: ['Sampai! Waze who? 😎', 'On time. Bos tak marah.'],
+    arriveGag: ['Putrajaya lagi… 😭', 'Saya nak pergi Mid Valley je…'],
+    gagOn: ['Siapa on Mode TuJu ni?!', 'Jangan… jangan tekan butang tu…'],
+    hazard: {
+      '🐄': ['Lembu ni pun guna TuJu ke?', 'Lembu ada lorong sendiri rupanya.'],
+      '🕳️': ['Lubang ni dah ada sejak Merdeka.', 'Tayar saya… 😢'],
+      '🌊': ['Kereta ke bot ni?', 'Banjir kilat. Kilat betul.'],
+      '🚧': ['Sekatan lagi…', 'Kerja jalan dari 2019.'],
+      '👮': ['Lesen ada… dalam hati.', 'Selamat petang tuan 🙏'],
+    },
+  },
+  en: {
+    start: ["Bismillah. Let's go!", 'Okay boss, moving.', 'Tank full. Iman also full.'],
+    startGag: ['Aiyo, TuJu again…', 'Pray for me.', "If I don't come back, send my salam."],
+    instr: ['Okay boss.', 'Noted.', 'Easy lah.'],
+    instrGag: ['Confirm or not ah…', 'I just follow lah.', 'Hmm. Hmm. Hmmmm.'],
+    red: ['Red light. TikTok scroll time 📱', 'Wait… wait…', 'Got time to eat karipap.'],
+    ranRed: ['YOLO 🏍️💨', 'Red is only a suggestion bro.', "AWAS camera? What's that?"],
+    lane: ['Change lane, give signal. Like a civilised person.', 'Follow the lane arrow 👍', 'Correct lane. Feels like China.'],
+    laneRempit: ['Squeeze a bit… squeeze a bit…', 'Lane? All lanes mine one.'],
+    makcik: ['Left signal on since Seremban.', "Right lane is makcik's lane.", 'Why everybody honking?'],
+    recalc: ['Server meeting again? I also want meeting.', 'Loading… like my life.', '3 minutes already. Engine also cold.'],
+    sea: ['Eh, why got fish?!', 'My car is not submarine!', 'TuJu said this one shortcut.'],
+    flip: ['Left or right ah bro?!', 'I U-turn only lah.', "He also don't know."],
+    rate: ['Turn right also must pay?', 'This one app or toll?'],
+    rated: ['One star. Happy now?', 'My stars I keep for Waze.'],
+    arrive: ['Reached! Waze who? 😎', 'On time. Boss not angry.'],
+    arriveGag: ['Putrajaya again… 😭', 'I only wanted Mid Valley…'],
+    gagOn: ['Who on TuJu Mode?!', "Don't… don't press that button…"],
+    hazard: {
+      '🐄': ['This cow also use TuJu ah?', 'Cow got own lane pulak.'],
+      '🕳️': ['This pothole here since Merdeka.', 'My tyre… 😢'],
+      '🌊': ['Car or boat this?', 'Flash flood. Very flash.'],
+      '🚧': ['Roadblock again…', 'Roadworks since 2019.'],
+      '👮': ['Licence got… in my heart.', 'Good afternoon tuan 🙏'],
+    },
+  },
+  zh: {
+    start: ['走咯！', 'OK老板，出发。', '油满了，信心也满了。'],
+    startGag: ['哎哟，又是TuJu…', '帮我祈祷。', '如果我回不来，帮我跟家人问好。'],
+    instr: ['OK老板。', '收到。', '简单啦。'],
+    instrGag: ['真的假的…', '我跟着走就是了啦。', '嗯。嗯。嗯嗯嗯。'],
+    red: ['红灯。滑TikTok时间 📱', '等…等…', '够时间吃个咖喱角。'],
+    ranRed: ['YOLO 🏍️💨', '红灯只是建议啦兄弟。', 'AWAS摄像头？那是什么？'],
+    lane: ['换车道，打灯。做个文明人。', '跟着箭头走 👍', '车道正确。感觉像在中国。'],
+    laneRempit: ['钻一下…钻一下…', '车道？全部车道都是我的。'],
+    makcik: ['从芙蓉就开着左转灯了。', '右边车道是安娣的车道。', '为什么大家都在按喇叭？'],
+    recalc: ['服务器又在开会？我也想开会。', '加载中…就像我的人生。', '三分钟了。车都冷了。'],
+    sea: ['咦，怎么有鱼？！', '我的车不是潜水艇！', 'TuJu说这是捷径。'],
+    flip: ['到底左还是右啊兄弟？！', '我掉头算了啦。', '它自己也不知道。'],
+    rate: ['右转也要付钱？', '这是app还是收费站？'],
+    rated: ['一颗星。满意了吧？', '我的星星留给Waze。'],
+    arrive: ['到了！Waze是谁？😎', '准时。老板不会骂。'],
+    arriveGag: ['又是布城… 😭', '我只是想去Mid Valley而已…'],
+    gagOn: ['谁开了TuJu模式？！', '不要…不要按那个按钮…'],
+    hazard: {
+      '🐄': ['这头牛也用TuJu吗？', '原来牛有自己的车道。'],
+      '🕳️': ['这个坑从独立日就在了。', '我的轮胎… 😢'],
+      '🌊': ['这是车还是船？', '闪电水灾。真的很闪电。'],
+      '🚧': ['又封路…', '从2019年修路修到现在。'],
+      '👮': ['驾照有…在心里。', '警察大人下午好 🙏'],
+    },
+  },
+  ta: {
+    start: ['போலாம் ரைட்!', 'சரி பாஸ், கிளம்பலாம்.', 'டேங்க் ஃபுல். நம்பிக்கையும் ஃபுல்.'],
+    startGag: ['ஐயோ, மறுபடியும் TuJu-வா…', 'எனக்காக வேண்டிக்கோங்க.', 'நான் திரும்பி வரலைன்னா, வீட்டுல சொல்லிடுங்க.'],
+    instr: ['சரி பாஸ்.', 'நோட் பண்ணிட்டேன்.', 'ஈசி தான்.'],
+    instrGag: ['இது சரியா…', 'சொன்னபடி போறேன் லா.', 'ம்ம். ம்ம். ம்ம்ம்ம்.'],
+    red: ['சிவப்பு லைட். TikTok scroll நேரம் 📱', 'வெயிட்… வெயிட்…', 'கரிபாப் சாப்பிட நேரம் இருக்கு.'],
+    ranRed: ['YOLO 🏍️💨', 'சிவப்பு வெறும் suggestion தான் அண்ணே.', 'AWAS கேமராவா? அது என்ன?'],
+    lane: ['லேன் மாத்து, சிக்னல் போடு. மரியாதையா.', 'அம்புக்குறி படி லேன் 👍', 'சரியான லேன். சீனாவுல ஓட்டுற மாதிரி இருக்கு.'],
+    laneRempit: ['கொஞ்சம் நுழையலாம்… கொஞ்சம் நுழையலாம்…', 'லேனா? எல்லா லேனும் என்னோடது.'],
+    makcik: ['சிரம்பான்லேர்ந்து இடது சிக்னல் போட்டிருக்கேன்.', 'வலது லேன் மக்சிக் லேன்.', 'ஏன் எல்லாரும் ஹாரன் அடிக்கிறாங்க?'],
+    recalc: ['சர்வர் மறுபடியும் மீட்டிங்கா? எனக்கும் மீட்டிங் வேணும்.', 'லோடிங்… என் வாழ்க்கை மாதிரி.', '3 நிமிஷம் ஆச்சு. காரே ஆறிப்போச்சு.'],
+    sea: ['ஏய், ஏன் மீன் இருக்கு?!', 'என் கார் நீர்மூழ்கிக் கப்பல் இல்ல!', 'இது ஷார்ட்கட்னு TuJu சொல்லுச்சு.'],
+    flip: ['இடதா வலதா ப்ரோ?!', 'நான் U-turn அடிச்சிடுறேன் லா.', 'அதுக்கே தெரியல.'],
+    rate: ['வலது திரும்பவும் காசு கட்டணுமா?', 'இது app-ஆ டோலா?'],
+    rated: ['ஒரு ஸ்டார். திருப்தியா?', 'என் ஸ்டார் எல்லாம் Waze-க்கு தான்.'],
+    arrive: ['வந்தாச்சு! Waze யாரு? 😎', 'கரெக்ட் டைம். பாஸ் திட்ட மாட்டார்.'],
+    arriveGag: ['மறுபடியும் புத்ராஜெயா… 😭', 'நான் Mid Valley தான் போகணும்னு நினைச்சேன்…'],
+    gagOn: ['யாரு TuJu மோட் ஆன் பண்ணது?!', 'வேண்டாம்… அந்த பட்டனை அழுத்தாதீங்க…'],
+    hazard: {
+      '🐄': ['இந்த மாடும் TuJu யூஸ் பண்ணுதா?', 'மாட்டுக்கு தனி லேன் இருக்கு போல.'],
+      '🕳️': ['இந்த குழி மெர்டேக்கா காலத்துலேர்ந்து இருக்கு.', 'என் டயர்… 😢'],
+      '🌊': ['இது காரா படகா?', 'திடீர் வெள்ளம். ரொம்ப திடீர்.'],
+      '🚧': ['மறுபடியும் ரோடு பிளாக்கா…', '2019-லேர்ந்து ரோடு வேலை நடக்குது.'],
+      '👮': ['லைசென்ஸ் இருக்கு… மனசுல.', 'வணக்கம் சார் 🙏'],
+    },
+  },
+};
+const L = () => LINES_BY_LANG[lang] || LINES_BY_LANG.en;
+const FACE = { red:'😴', ranRed:'😈', recalc:'😰', sea:'😱', flip:'🤨', rate:'🤬', rated:'😤', arriveGag:'😭', arrive:'😁', hazard:'😬', gagOn:'😨', teleport:'🫠' };
+
+let bubbleUntil = 0;
+function talk(text, mood, force = true) {
+  if (!force && Date.now() < bubbleUntil) return;
+  $('bubble').removeAttribute('data-i18n'); $('bubble').textContent = text;
+  bubbleUntil = Date.now() + 3500;
+  const f = $('face'); f.textContent = FACE[mood] || PERSONAS[persona].face;
+  f.classList.add('pop'); setTimeout(() => f.classList.remove('pop'), 250);
+  clearTimeout(talk.t); talk.t = setTimeout(() => f.textContent = PERSONAS[persona].face, 3500);
+}
+
+
+// ---------- geometry ----------
+const RAD = Math.PI / 180;
+function haversine(a, b) {
+  const dLat = (b.lat - a.lat) * RAD, dLng = (b.lng - a.lng) * RAD;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * RAD) * Math.cos(b.lat * RAD) * Math.sin(dLng / 2) ** 2;
+  return 12742000 * Math.asin(Math.sqrt(h));
+}
+function bearing(a, b) {
+  const dl = (b.lng - a.lng) * RAD;
+  return (Math.atan2(Math.sin(dl) * Math.cos(b.lat * RAD), Math.cos(a.lat * RAD) * Math.sin(b.lat * RAD) - Math.sin(a.lat * RAD) * Math.cos(b.lat * RAD) * Math.cos(dl)) / RAD + 360) % 360;
+}
+const angDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
+function at(r, d) {
+  d = Math.max(0, Math.min(r.total, d));
+  let i = r.cum.findIndex(c => c >= d); if (i <= 0) return r.path[Math.max(i, 0)];
+  const k = (d - r.cum[i - 1]) / ((r.cum[i] - r.cum[i - 1]) || 1), a = r.path[i - 1], b = r.path[i];
+  return { lat: a.lat + (b.lat - a.lat) * k, lng: a.lng + (b.lng - a.lng) * k };
+}
+const headingAt = (r, d) => bearing(at(r, d - 10), at(r, d + 30));
+
+// ---------- the simulated car: drives the route the app gives us, reports GPS back ----------
+// playback speed: 1× is real time; faster only to shorten the demo
+const SPEEDS = [1, 2, 5];
+let TIME_SCALE = 1;
+$('chipTime').onclick = () => { TIME_SCALE = SPEEDS[(SPEEDS.indexOf(TIME_SCALE) + 1) % SPEEDS.length]; };
+const ACCEL = 2.5, BRAKE = 3.5; // m/s², comfortable driving
+// keyboard driving: hold ↑ to accelerate, ↓ to brake, release both to coast; A hands back to autopilot
+const keys = { up: false, down: false };
+let manual = false, runLight = null, waitingAt = null;
+const MAN_ACCEL = 3, MAN_BRAKE = 7, COAST = .6; // m/s²
+let R = null, D = 0, V = 0, driving = false, lastGps = 0, arrived = false;
+
+function setRoute(m) {
+  const here = R ? at(R, D) : null;
+  buildPath(m.id, m.path.map(([lat, lng]) => ({ lat, lng })), false);
+  R.junctions = m.junctions || [];
+  // a reroute starts where the app last saw us; we've driven on since, so join the new route at our real position
+  if (here) {
+    let best = Infinity, bd = 0;
+    for (let d = 0; d < Math.min(R.total, 1500); d += 5) { const h = haversine(at(R, d), here); if (h < best) { best = h; bd = d; } }
+    if (best < 60) D = bd;
+  }
+}
+function buildPath(id, path, detour) {
+  const cum = [0];
+  for (let i = 1; i < path.length; i++) cum.push(cum[i - 1] + haversine(path[i - 1], path[i]));
+  R = { id, path, cum, total: cum[cum.length - 1], frames: [], detour };
+  // curvature every 5 m: heading change across ±12 m of road → radius; a turn's safe speed is sqrt(grip × radius)
+  R.curv = [];
+  for (let d = 0; d <= R.total; d += 5) {
+    const turn = angDiff(bearing(at(R, d - 12), at(R, d)), bearing(at(R, d), at(R, d + 12))) * RAD;
+    R.curv.push(turn / 24); // 1/radius in 1/m
+  }
+  D = 0; arrived = false;
+  if (!detour) loadPhotos(R);
+  drawLanes(true);
+}
+
+// ---------- going off route: drive a real road the app didn't ask for ----------
+// OSRM finds the actual road from here toward a point 350 m left / ahead / right; the app sees us leave its route and recalculates
+let detouring = false;
+// exits of a junction relative to our direction of travel: rel < 0 left, > 0 right, ~0 straight
+function exitsOf(j) {
+  const heading = (j.bearings[j.in] + 180) % 360;
+  return j.bearings.map((b, i) => ({ i, b, rel: ((b - heading + 540) % 360) - 180, ok: j.entry[i] && i !== j.in, route: i === j.out })).filter(e => e.ok);
+}
+// pick the exit for a held direction at a junction; straight counts as "not turning" when the route turns the other way there
+function exitFor(j, dir) {
+  const ex = exitsOf(j), side = ex.filter(e => !e.route && dir * e.rel > 25 && Math.abs(e.rel) < 160);
+  if (side.length) return side.sort((a, b) => Math.abs(Math.abs(a.rel) - 90) - Math.abs(Math.abs(b.rel) - 90))[0];
+  const routeExit = ex.find(e => e.route);
+  if (routeExit && -dir * routeExit.rel > 25) return ex.find(e => !e.route && Math.abs(e.rel) <= 25) || null; // miss the turn: go straight
+  return null;
+}
+async function takeJunction(dir) {
+  if (!R || detouring) return false;
+  // nearest junction ahead with a usable exit that way; if its road just merges back, try the next one
+  for (const j of (R.junctions || []).filter(j => j.at - D > 6 && j.at - D < 400 && exitFor(j, dir)).slice(0, 3))
+    if (await tryJunction(j, dir)) return true;
+  return false;
+}
+async function tryJunction(j, dir) {
+  const e = exitFor(j, dir);
+  detouring = true;
+  try {
+    // follow our route up to the junction, then the chosen road beyond it
+    const D0 = D, pre = []; for (let d = D; d < j.at; d += 5) pre.push(at(R, d));
+    const jp = { lat: j.lat, lng: j.lng };
+    // start exactly at the junction, locked to the exit's bearing; try a few targets down that road and keep the one that leaves our route soonest
+    const ref = []; for (let d = j.at; d < Math.min(R.total, j.at + 1500); d += 10) ref.push(at(R, d));
+    const leaveAt = path => { let acc = 0; for (let i = 1; i < path.length; i++) { acc += haversine(path[i - 1], path[i]); if (Math.min(...ref.map(q => haversine(q, path[i]))) > 20) return acc; } return Infinity; };
+    const cands = await Promise.all([120, 250, 450].map(async dist => {
+      const z = offsetLL(jp, e.b, dist);
+      const url = `https://router.project-osrm.org/route/v1/driving/${jp.lng},${jp.lat};${z.lng},${z.lat}?overview=full&geometries=geojson&continue_straight=true&bearings=${Math.round(e.b)},20;0,180&radiuses=12;100`;
+      const res = await (await fetch(url)).json();
+      if (res.code !== 'Ok') return null;
+      const path = res.routes[0].geometry.coordinates.map(([lng, lat]) => ({ lat, lng }));
+      return { path, leave: leaveAt(path) };
+    }));
+    const best = cands.filter(Boolean).sort((x, y) => x.leave - y.leave)[0];
+    if (!best || best.leave > 250) throw new Error('exit road rejoins route');
+    const moved = D - D0; // we kept driving while the request was out
+    buildPath('detour-' + Date.now(), [...pre, jp, ...best.path], true);
+    D = moved;
+    talk(tr(Math.abs(e.rel) <= 25 ? 'offStraight' : e.rel < 0 ? 'offLeft' : 'offRight'), 'flip');
+  } catch { detouring = false; return false; }
+  detouring = false;
+  return true;
+}
+async function takeRoad(turn) {
+  // real junction exits first; free-form search only when we're already off the app's route
+  if (turn && await takeJunction(Math.sign(turn))) return;
+  if (turn && !R?.detour) return talk(tr('noRoad'));
+  if (!R || detouring) return;
+  detouring = true;
+  const p = at(R, D), hd = headingAt(R, D);
+  try {
+    // ask for roads toward a few points off to that side; keep the one that leaves our route soonest (= the next real turn)
+    const ref = []; for (let d = D; d < Math.min(R.total, D + 1500); d += 10) ref.push(at(R, d));
+    const offRouteAt = path => { // metres along the candidate until it's >25 m from our route
+      let acc = 0;
+      for (let i = 1; i < path.length; i++) {
+        acc += haversine(path[i - 1], path[i]);
+        if (Math.min(...ref.map(q => haversine(q, path[i]))) > 25) return acc;
+      }
+      return Infinity;
+    };
+    const cands = await Promise.all((turn ? [60, 180, 400] : [250, 500]).map(async fwd => {
+      const tgt = offsetLL(offsetLL(p, hd, fwd), hd + turn, turn ? 200 : 0);
+      const url = `https://router.project-osrm.org/route/v1/driving/${p.lng},${p.lat};${tgt.lng},${tgt.lat}?overview=full&geometries=geojson&continue_straight=true&bearings=${Math.round(hd)},60;0,180`;
+      const j = await (await fetch(url)).json();
+      if (j.code !== 'Ok') return null;
+      const path = j.routes[0].geometry.coordinates.map(([lng, lat]) => ({ lat, lng }));
+      return { path, leave: offRouteAt(path) };
+    }));
+    const best = cands.filter(Boolean).sort((a, b) => a.leave - b.leave)[0];
+    if (!best) throw new Error('no road');
+    buildPath('detour-' + Date.now(), best.path, true);
+    talk(tr(turn < 0 ? 'offLeft' : turn > 0 ? 'offRight' : 'offStraight'), 'flip');
+  } catch { talk(tr('noRoad')); }
+  detouring = false;
+}
+
+function drive(dt) {
+  if (!R) return;
+  const P = PERSONAS[persona], sdt = dt * TIME_SCALE, before = D;
+  let target = driving && !arrived ? P.kmh : 0;
+  // look ahead: slow down early enough for the tightest bend within braking range
+  const v0 = P.kmh / 3.6;
+  for (let a = 0; a <= 160; a += 5) {
+    const k = R.curv[Math.round((D + a) / 5)]; if (k == null) break;
+    const vTurn = Math.sqrt(P.lat / Math.max(k, 1e-4));
+    if (vTurn >= v0) continue;
+    target = Math.min(target, Math.sqrt(vTurn ** 2 + 2 * BRAKE * a) * 3.6);
+  }
+  // nav state is relative to its own matched distance; convert to absolute route distance so a laggy message can't make us overshoot
+  const lt = S?.light && S.routeId === R.id ? { ...S.light, ahead: S.dist + S.light.d - D } : null;
+  // stop for red/yellow automatically, even with ↑ held; a fresh ↑ press once stopped at the line runs it (see keydown)
+  const stopAt = lt && !lt.go && !P.runRed && !gag && lt.id !== runLight && lt.ahead > 0 && lt.ahead < 120 ? D + lt.ahead - 8 : null;
+  if (stopAt != null) target = Math.min(target, Math.sqrt(2 * BRAKE * Math.max(0, stopAt - D)) * 3.6);
+  const haz = (S?.hazards || []).map(h => S.dist + h.d - D).find(a => a > 0 && a < 60);
+  if (haz != null) target = Math.min(target, 22);
+  if (manual) {
+    // the driver is in charge of speed; only red lights brake automatically (↑ at the line runs it)
+    const a = keys.down ? -MAN_BRAKE : keys.up ? MAN_ACCEL : -COAST;
+    V = Math.max(0, Math.min(130, V + a * 3.6 * sdt));
+    if (stopAt != null) V = Math.min(V, Math.sqrt(2 * BRAKE * Math.max(0, stopAt - D)) * 3.6);
+    D += V / 3.6 * sdt;
+    if (stopAt != null && D > stopAt) { D = Math.max(before, stopAt); V = 0; }
+    waitingAt = stopAt != null && V < 3 && stopAt - D < 4 ? lt.id : null;
+  } else {
+    // km/h change per simulated second = m/s² × 3.6; hard brake allowed only for red lights
+    V += Math.max(-(stopAt != null ? 8 : BRAKE) * 3.6 * sdt, Math.min(ACCEL * 3.6 * sdt, target - V));
+    D += Math.max(0, V) / 3.6 * sdt;
+    if (stopAt != null && D > stopAt) { D = Math.max(before, stopAt); V = 0; }
+    waitingAt = stopAt != null && V < 3 && stopAt - D < 4 ? lt.id : null;
+  }
+  // a detour road ran out before the app rerouted us: keep going straight on whatever road comes next
+  if (R.detour && D > R.total - 40 && !detouring) takeRoad(0);
+  if (D >= R.total) { D = R.total; V = 0; if (!R.detour) arrived = true; }
+  if (performance.now() - lastGps > 100) {
+    lastGps = performance.now();
+    const p = at(R, D);
+    bc.postMessage({ t: 'gps', to: pinned, lat: p.lat, lng: p.lng, kmh: V, lane: laneIdx, lanes: lanesN });
+  }
+}
+
+// ---------- street imagery (KartaView: free, no key) ----------
+// shortcut: photos are fetched per route around sample points every 150 m (API caps a page at 100); fine for city demo routes, cache/tile it for long trips
+async function loadPhotos(r) {
+  const pts = []; for (let d = 0; d <= r.total; d += 150) pts.push(at(r, d));
+  const seen = new Map();
+  let i = 0;
+  await Promise.all(Array.from({ length: 4 }, async () => {
+    while (i < pts.length) {
+      const p = pts[i++];
+      try {
+        const j = await (await fetch(`https://api.kartaview.org/2.0/photo/?lat=${p.lat}&lng=${p.lng}&radius=120&itemsPerPage=100`)).json();
+        j.result.data.forEach(x => seen.set(x.id, x));
+      } catch { /* no imagery here: 3D map shows instead */ }
+    }
+  }));
+  if (r !== R) return;
+  const photos = [...seen.values()]
+    .filter(x => x.projection !== 'SPHERE' && +x.headers > 0)
+    .map(x => ({ lat: +(x.matchLat || x.lat), lng: +(x.matchLng || x.lng), dir: +x.headers, url: x.fileurlLTh || x.fileurlProc }));
+  // some KartaView storage hosts are down: probe one image per host, drop photos on dead hosts
+  const host = u => new URL(u).host, alive = {};
+  await Promise.all([...new Set(photos.map(ph => host(ph.url)))].map(h => new Promise(res => {
+    const im = new Image(), done = ok => { alive[h] = ok; res(); };
+    im.onload = () => done(true); im.onerror = () => done(false); setTimeout(() => done(false), 5000);
+    im.src = photos.find(ph => host(ph.url) === h).url;
+  })));
+  if (r !== R) return;
+  photos.splice(0, photos.length, ...photos.filter(ph => alive[host(ph.url)]));
+  // one frame every 12 m: nearest photo within 25 m that faces our direction of travel
+  for (let d = 0; d <= r.total; d += 12) {
+    const p = at(r, d), hd = headingAt(r, d);
+    let best = null, score = Infinity;
+    for (const ph of photos) {
+      const dist = haversine(p, ph); if (dist > 25) continue;
+      const ad = angDiff(ph.dir, hd); if (ad > 40) continue;
+      const s = dist + ad * .4; if (s < score) { score = s; best = ph.url; }
+    }
+    r.frames.push(best);
+  }
+  r.photoCount = photos.length;
+}
+
+let shownUrl = null, front = 'photoA', photosOn = false;
+$('chipSrc').onclick = () => { photosOn = !photosOn; };
+function showFrame() {
+  // street photos are patchy and can't follow lane changes, so the continuous 3D view is the default
+  const url = photosOn && R && !arrived ? R.frames[Math.floor(D / 12)] : null;
+  $('chipSrc').textContent = !photosOn ? '🎥 3D view · 📷 off' : url ? '📷 Street photo' : '📷 on · no photo here';
+  if (url === shownUrl) return;
+  shownUrl = url;
+  const back = front === 'photoA' ? 'photoB' : 'photoA';
+  if (!url) { $(front).classList.remove('show'); return; }
+  const img = $(back);
+  img.onload = () => { if (shownUrl !== url) return; img.classList.add('show'); $(front).classList.remove('show'); front = back; };
+  img.src = url;
+  // warm the cache for the next few frames
+  for (let k = 1; k <= 4; k++) { const u = R.frames[Math.floor(D / 12) + k]; if (u) new Image().src = u; }
+}
+
+// ---------- 3D first-person fallback view ----------
+// ---------- driver's-eye view: continuous 3D from OpenStreetMap, camera at eye height in the current lane ----------
+const fp = new maplibregl.Map({ container: 'fp', style: 'https://tiles.openfreemap.org/styles/liberty', center: [101.6924545, 3.1550721], zoom: 20, pitch: 80, maxPitch: 85, maxZoom: 24, interactive: false, attributionControl: false });
+let camHdg = 0, laneF = 1;
+const LANE_M = 3.5, EYE_M = 1.3, PITCH = 81;
+const mPerPx0 = 40075016 * Math.cos(3.15 * RAD) / 512; // metres per pixel at zoom 0 (KL latitude)
+const metres = m => ['interpolate', ['exponential', 2], ['zoom'], 14, m / mPerPx0 * 2 ** 14, 24, m / mPerPx0 * 2 ** 24];
+function offsetLL(p, brg, m) {
+  return { lat: p.lat + m * Math.cos(brg * RAD) / 111320, lng: p.lng + m * Math.sin(brg * RAD) / (111320 * Math.cos(p.lat * RAD)) };
+}
+fp.on('load', () => {
+  // labels and POI icons are huge at eye level; hide them
+  fp.getStyle().layers.filter(l => l.type === 'symbol').forEach(l => fp.setLayoutProperty(l.id, 'visibility', 'none'));
+  // overzoomed tiles leave the ground bare white; a muted tone reads as road verge
+  fp.getStyle().layers.filter(l => l.type === 'background').forEach(l => fp.setPaintProperty(l.id, 'background-color', '#c9cfc4'));
+  fp.addSource('drv', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+  const before = fp.getLayer('building-3d') ? 'building-3d' : undefined, line = { 'line-join': 'round', 'line-cap': 'butt' };
+  fp.addLayer({ id: 'drv-road', type: 'line', source: 'drv', layout: line, paint: { 'line-color': '#3b4047' } }, before);
+  fp.addLayer({ id: 'drv-edge-l', type: 'line', source: 'drv', layout: line, paint: { 'line-color': '#f4f4f4', 'line-width': metres(.15) } }, before);
+  fp.addLayer({ id: 'drv-edge-r', type: 'line', source: 'drv', layout: line, paint: { 'line-color': '#f4f4f4', 'line-width': metres(.15) } }, before);
+  for (let k = 1; k <= 4; k++) fp.addLayer({ id: 'drv-div-' + k, type: 'line', source: 'drv', layout: line, paint: { 'line-color': '#ffffff', 'line-width': metres(.15), 'line-dasharray': [20, 40] } }, before);
+  if (R) drawLanes(true);
+});
+let drawnLanes = 0;
+function drawLanes(force) {
+  if (!fp.getSource('drv') || (!force && drawnLanes === lanesN)) return;
+  drawnLanes = lanesN;
+  const half = lanesN * LANE_M / 2;
+  fp.getSource('drv').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: R.path.map(p => [p.lng, p.lat]) } });
+  fp.setPaintProperty('drv-road', 'line-width', metres(lanesN * LANE_M + .8));
+  fp.setPaintProperty('drv-edge-l', 'line-offset', metres(-half + .3));
+  fp.setPaintProperty('drv-edge-r', 'line-offset', metres(half - .3));
+  for (let k = 1; k <= 4; k++) {
+    fp.setLayoutProperty('drv-div-' + k, 'visibility', k < lanesN ? 'visible' : 'none');
+    if (k < lanesN) fp.setPaintProperty('drv-div-' + k, 'line-offset', metres(-half + k * LANE_M));
+  }
+}
+function driverCamera() {
+  const p0 = at(R, D), hd = headingAt(R, D);
+  // ease heading so turns sweep instead of snapping; ease lane offset so lane changes glide
+  camHdg = (camHdg + (((hd - camHdg + 540) % 360) - 180) * .08 + 360) % 360;
+  laneF += (laneIdx - laneF) * .06;
+  const eye = offsetLL(p0, camHdg + 90, (laneF - (lanesN - 1) / 2) * LANE_M);
+  // MapLibre places the camera behind 'center'; solve zoom for eye height, then push center ahead so the camera sits on the car
+  const camPx = fp.getContainer().clientHeight / 2 / Math.tan(fp.transform.fov / 2 * RAD || .3217);
+  const z = Math.log2(camPx * Math.cos(PITCH * RAD) / EYE_M * mPerPx0);
+  const ahead = camPx * mPerPx0 / 2 ** z * Math.sin(PITCH * RAD);
+  const c = offsetLL(eye, camHdg, ahead);
+  fp.jumpTo({ center: [c.lng, c.lat], bearing: camHdg + steerYaw, pitch: PITCH, zoom: Math.min(24, z) });
+}
+
+// ---------- state from the nav app ----------
+let S = null, gag = false, lastLightRed = null;
+let lastHeard = 0;
+function fromPinned(m) {
+  if (!m.inst) return false;
+  if (!pinned || performance.now() - lastHeard > 3000) pinned = m.inst;
+  if (m.inst !== pinned) return false;
+  lastHeard = performance.now(); return true;
+}
+const appLinked = () => pinned && performance.now() - lastHeard < 3000;
+bc.onmessage = ({ data: m }) => {
+  if (!fromPinned(m)) return;
+  if (m.lang && m.lang !== lang) { lang = m.lang; applyLang(); }
+  if (m.t === 'route') { if (!R || R.id !== m.id) setRoute(m); return; }
+  if (m.t === 'state') { S = m; gag = m.gag; $('gagBtn').classList.toggle('on', gag); return; }
+  if (m.t !== 'event') return;
+  gag = m.gag; $('gagBtn').classList.toggle('on', gag);
+  const k = m.kind;
+  if (k === 'start') { talk(rand(gag ? L().startGag : L().start)); sea = 0; }
+  else if (k === 'instr') talk(rand(gag ? L().instrGag : L().instr), null, false);
+  else if (k === 'hazard') talk(rand(L().hazard[m.text] || [tr('what')]), 'hazard');
+  else if (k === 'sea') { talk(rand(L().sea), 'sea'); sea = Date.now() + 4400; }
+  else if (k === 'teleport') talk(tr('teleport')(m.text), 'teleport');
+  else if (k === 'arrive') { talk(rand(gag ? L().arriveGag : L().arrive), gag ? 'arriveGag' : 'arrive'); driving = false; }
+  else if (k === 'gag') m.text && talk(rand(L().gagOn), 'gagOn');
+  else if (k === 'reroute') talk(tr('rerouted'), 'arrive');
+  else if (L()[k]) talk(rand(L()[k]), k);
+};
+
+// ---------- controls ----------
+let appWin = null;
+const openApp = () => { appWin = window.open('index.html', 'setuju-app', 'popup,width=420,height=880'); };
+$('openApp').onclick = openApp;
+$('startBtn').onclick = async () => {
+  driving = true; arrived = false;
+  if (!appLinked()) { if (!appWin || appWin.closed) openApp(); await new Promise(r => setTimeout(r, 3500)); }
+  cmd('start', { from: { name: 'ASB Campus', lat: 3.1550721, lng: 101.6924545 } }); cmd('needRoute');
+};
+// lane controls: buttons or arrow keys switch to manual; Auto lets the driver follow the app's lane hints
+let autoLane = true;
+function shiftLane(d) {
+  autoLane = false; $('laneAuto').classList.remove('on');
+  const to = Math.max(0, Math.min(lanesN - 1, laneIdx + d));
+  if (to !== laneIdx) { blink = d; laneIdx = to; }
+}
+$('laneL').onclick = () => shiftLane(-1);
+$('laneR').onclick = () => shiftLane(1);
+$('laneAuto').onclick = () => { autoLane = !autoLane; $('laneAuto').classList.toggle('on', autoLane); };
+function setManual(on) { manual = on; $('modeBtn').classList.toggle('on', !on); $('modeBtn').textContent = on ? '🕹️ ' + tr('manual') : '🤖 ' + tr('autopilot'); }
+addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) e.preventDefault();
+  if (e.repeat && !['arrowup', 'arrowdown'].includes(k)) return;
+  // steering: tap = lane change (on key up), hold = turn onto the next road that way
+  if ((k === 'arrowleft' || k === 'arrowright') && !steer) {
+    const st = steer = { dir: k === 'arrowleft' ? -1 : 1, t0: performance.now(), turned: false };
+    // a timer, not the render loop, decides tap vs hold (frames can be throttled)
+    st.timer = setTimeout(() => { if (steer === st) { st.turned = true; takeRoad(st.dir * 90); } }, HOLD_TO_TURN);
+  }
+  if (k === 'arrowup' || k === 'arrowdown') {
+    if (!R) { $('startBtn').onclick(); return; }
+    if (k === 'arrowup' && !e.repeat && waitingAt != null) runLight = waitingAt; // stopped at red + fresh ↑ = run the light
+    keys[k === 'arrowup' ? 'up' : 'down'] = true; driving = true; arrived = false; setManual(true);
+  }
+  if (k === 'a') setManual(false);
+});
+addEventListener('keyup', e => {
+  if (e.key === 'ArrowUp') keys.up = false;
+  if (e.key === 'ArrowDown') keys.down = false;
+  if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && steer) { clearTimeout(steer.timer); if (!steer.turned) shiftLane(steer.dir); steer = null; }
+});
+let steer = null, steerYaw = 0;
+const HOLD_TO_TURN = 450; // ms
+function updateSteer() {
+  // view swings toward the held direction, then settles back
+  const want = steer ? steer.dir * Math.min(25, (performance.now() - steer.t0) / 18) : 0;
+  steerYaw += (want - steerYaw) * .12;
+}
+addEventListener('blur', () => { keys.up = keys.down = false; steer = null; });
+$('modeBtn').onclick = () => setManual(!manual);
+
+// Stop only parks the simulated car; the app keeps navigating (end the trip from the app itself)
+$('stopBtn').onclick = () => { driving = false; };
+$('gagBtn').onclick = () => cmd('gag', { v: !gag });
+document.querySelectorAll('[data-h]').forEach(b => b.onclick = () => {
+  if (!S) return talk(tr('notStarted'));
+  cmd('hazard', { e: b.dataset.h });
+});
+document.querySelectorAll('[data-p]').forEach(b => b.onclick = () => {
+  persona = b.dataset.p;
+  document.querySelectorAll('[data-p]').forEach(x => x.classList.toggle('on', x === b));
+  applyLang();
+  talk(persona === 'makcik' ? rand(L().makcik) : persona === 'rempit' ? rand(L().laneRempit) : tr('okDrive'));
+});
+
+// ---------- bird's-eye picture-in-picture (lane changes) ----------
+const cv = $('cv'), ctx = cv.getContext('2d');
+const PX_PER_M = 1.4, LANE_W = 52;
+let W = 0, H = 0, scroll = 0, lanesN = 3, carX = null, laneIdx = 1, blink = 0, sea = 0, nextZig = 0;
+const npcs = Array.from({ length: 5 }, (_, i) => ({ lane: i % 3, y: Math.random() * 300, v: .6 + Math.random() * .5, c: rand(['#f1c40f', '#ecf0f1', '#3498db', '#9b59b6', '#2c3e50']) }));
+
+function resize() {
+  const r = cv.getBoundingClientRect(), dpr = devicePixelRatio || 1;
+  W = r.width; H = r.height; cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+addEventListener('resize', resize); resize();
+
+function laneCenter(i) { const roadW = lanesN * LANE_W; return W / 2 - roadW / 2 + LANE_W * (i + .5); }
+
+function pickLane() {
+  const n = lanesN, cur = Math.min(laneIdx, n - 1);
+  if (!autoLane) return cur;
+  if (persona === 'makcik') return n - 1; // fast lane, slow speed
+  if (persona === 'rempit') { if (Date.now() > nextZig) { nextZig = Date.now() + 1200; return Math.floor(Math.random() * n); } return cur; }
+  let target = cur;
+  const valid = (S?.lanes || []).map((l, i) => l.valid ? i : -1).filter(i => i >= 0);
+  if (valid.length && !valid.includes(cur)) target = valid.reduce((a, b) => Math.abs(b - cur) < Math.abs(a - cur) ? b : a);
+  // swerve around a hazard in our lane
+  const h = (S?.hazards || []).find(h => h.d > 0 && h.d < 160 && h.id % n === target);
+  if (h) target = target > 0 ? target - 1 : target + 1;
+  return target;
+}
+
+function drawCar(x, y, color, me) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(.62, .62);
+  ctx.fillStyle = '#0006'; ctx.fillRect(-21, -34, 46, 72);
+  ctx.fillStyle = color; roundRect(-22, -38, 44, 76, 10); ctx.fill();
+  ctx.fillStyle = '#1b2733'; roundRect(-17, -24, 34, 18, 5); ctx.fill(); roundRect(-17, 14, 34, 12, 4); ctx.fill();
+  ctx.fillStyle = '#fff6b0'; ctx.fillRect(-18, -40, 9, 4); ctx.fillRect(9, -40, 9, 4);
+  if (me && blink && Math.floor(Date.now() / 250) % 2) { ctx.fillStyle = '#ffa500'; const s = blink; ctx.fillRect(s < 0 ? -24 : 16, -38, 8, 8); ctx.fillRect(s < 0 ? -24 : 16, 30, 8, 8); }
+  if (me && V < 1) { ctx.fillStyle = '#ff2b2b'; ctx.fillRect(-18, 36, 9, 4); ctx.fillRect(9, 36, 9, 4); }
+  ctx.restore();
+}
+function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+
+function drawPip(t, dDist) {
+  const carY = H - 50;
+  ctx.fillStyle = gag ? '#5a3d6b' : '#3d7a3a'; ctx.fillRect(0, 0, W, H);
+  const roadW = lanesN * LANE_W, rx = W / 2 - roadW / 2;
+  ctx.fillStyle = '#2d3238'; ctx.fillRect(rx - 6, 0, roadW + 12, H);
+  ctx.fillStyle = '#fff'; ctx.fillRect(rx - 4, 0, 3, H); ctx.fillRect(rx + roadW + 1, 0, 3, H);
+  ctx.fillStyle = '#ffffffcc';
+  for (let i = 1; i < lanesN; i++) for (let y = (scroll % 40) - 40; y < H; y += 40) ctx.fillRect(rx + LANE_W * i - 1.5, y, 3, 20);
+  if (S?.lanes) {
+    ctx.font = 'bold 20px system-ui'; ctx.textAlign = 'center';
+    S.lanes.forEach((l, i) => { ctx.fillStyle = l.valid ? '#33ccffdd' : '#ffffff55'; ctx.fillText(l.indications.map(ind => ({ left:'↰', 'sharp left':'↰', 'slight left':'↖', 'slight right':'↗', right:'↱', 'sharp right':'↱', uturn:'↶' }[ind] || '↑')).join(''), laneCenter(i), (scroll % 200) + 20); });
+  }
+  npcs.forEach(n => {
+    if (n.lane >= lanesN) n.lane = lanesN - 1;
+    n.y += dDist * PX_PER_M * (1 - n.v);
+    if (n.y > H + 50) { n.y = -50; n.lane = Math.floor(Math.random() * lanesN); }
+    if (Math.abs(laneCenter(n.lane) - (carX ?? 0)) > 40 || Math.abs(n.y - carY) > 70) drawCar(laneCenter(n.lane), n.y, n.c, false);
+  });
+  const lt = S?.light;
+  if (lt && lt.d < 150) {
+    const y = carY - 30 - lt.d * PX_PER_M;
+    ctx.fillStyle = '#fff'; ctx.fillRect(rx, y, roadW, 5);
+    ctx.fillStyle = lt.color || '#e74c3c'; ctx.beginPath(); ctx.arc(rx + roadW + 14, y - 8, 7, 0, 7); ctx.fill();
+  }
+  (S?.hazards || []).forEach(h => { ctx.font = '28px serif'; ctx.textAlign = 'center'; ctx.fillText(h.e, laneCenter(h.id % lanesN), carY - 30 - h.d * PX_PER_M); });
+  if (S) {
+    const target = pickLane();
+    if (target !== laneIdx) {
+      blink = target > laneIdx ? 1 : -1;
+      if (persona === 'grab' && !(S.hazards || []).length) talk(rand(L().lane), null, false);
+      if (persona === 'rempit') talk(rand(L().laneRempit), 'ranRed', false);
+      laneIdx = target;
+    }
+  }
+  if (persona === 'makcik' && autoLane) blink = -1; // eternal left signal
+  const tx = laneCenter(laneIdx);
+  carX = carX == null ? tx : carX + (tx - carX) * .08;
+  if (Math.abs(tx - carX) < 2 && !(persona === 'makcik' && autoLane)) blink = 0;
+  ctx.save(); ctx.translate(carX, carY); ctx.rotate((tx - carX) * .006); drawCar(0, 0, gag ? '#ff3b6b' : '#e63946', true); ctx.restore();
+}
+
+// ---------- driver's-view overlays ----------
+const exitArrow = rel => rel < -60 ? '↰' : rel < -25 ? '↖' : rel <= 25 ? '↑' : rel <= 60 ? '↗' : '↱';
+function drawJunction() {
+  const j = R && !R.detour && (R.junctions || []).find(j => j.at - D > 3 && j.at - D < 250);
+  const el = $('junc');
+  if (!j) { el.style.display = 'none'; return; }
+  el.style.display = 'flex';
+  // blue = the app's route, white = other legal exits (hold ← / → to take one)
+  el.innerHTML = `${Math.round(j.at - D)} m ` + exitsOf(j).sort((a, b) => a.rel - b.rel).map(e => `<span class="x ${e.route ? 'r' : ''}">${exitArrow(e.rel)}</span>`).join('');
+}
+function drawView() {
+  drawJunction();
+  const lt = S?.light;
+  if (lt && lt.d < 150) {
+    $('vlight').style.display = 'flex'; $('vbulb').style.background = lt.color; $('vbulb').style.color = lt.color; $('vsecs').textContent = lt.secs;
+    $('chipLight').hidden = false; $('chipLight').textContent = `🚦 ${Math.round(lt.d)} m`;
+    if (V < 1 && !lt.go && lastLightRed !== lt.id) { lastLightRed = lt.id; talk(rand(L().red), 'red'); }
+  } else { $('vlight').style.display = 'none'; $('chipLight').hidden = true; }
+  // hazards grow as we approach: fake perspective, closer = lower and bigger
+  $('vhaz').innerHTML = (S?.hazards || []).filter(h => h.d > 2 && h.d < 200).map(h => {
+    const k = 1 - h.d / 200, x = 50 + ((h.id % lanesN) - laneIdx) * 14 * k;
+    return `<div class="vhaz" style="top:${48 + 32 * k * k}%;left:${x}%;font-size:${24 + 150 * k * k}px">${h.e}</div>`;
+  }).join('');
+  $('seaView').classList.toggle('show', Date.now() < sea); $('seaText').textContent = tr('sea');
+  $('thinkView').classList.toggle('show', !!(S?.paused && gag)); $('thinkText').textContent = tr('thinking');
+}
+
+let lastT = performance.now();
+function frame(t) {
+  const dt = Math.min(.1, (t - lastT) / 1000); lastT = t;
+  const before = D;
+  drive(dt);
+  const dDist = D - before;
+  scroll += dDist * PX_PER_M;
+  $('kmh').textContent = Math.round(V);
+  const wantN = Math.max(2, Math.min(5, S?.lanes?.length || 3));
+  if (wantN !== lanesN) { lanesN = wantN; laneIdx = Math.min(laneIdx, lanesN - 1); }
+  if (R) {
+    updateSteer();
+    drawLanes();
+    driverCamera();
+    showFrame();
+  }
+  drawPip(t, dDist);
+  drawView();
+  $('chipLane').textContent = `${tr('lane')} ${laneIdx + 1}/${lanesN}`;
+  $('chipTime').textContent = TIME_SCALE === 1 ? '▶ 1× real time' : `⏩ ${TIME_SCALE}×`;
+  $('appStatus').textContent = appLinked() ? '🟢 ' + tr('linked') : '⚪ ' + tr('notLinked');
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+applyLang();
+</script>
+</body>
+</html>
