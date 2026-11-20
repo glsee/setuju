@@ -94,6 +94,44 @@
   .light { display:none; align-items:center; gap:10px; margin-bottom:8px; padding:8px 10px; border-radius:10px; background:#0f1720; font-weight:700; }
   .light .bulb { width:22px; height:22px; border-radius:50%; }
   .light .secs { font-size:22px; font-variant-numeric:tabular-nums; margin-left:auto; }
+
+  /* ---------- Liquid Glass (Apple's 2025 look): translucent blurred panels, bright rim, soft depth, pill controls ---------- */
+  :root { --text:#0b1220; --muted:#4b5a6b; --accent:#0a84ff;
+    --glass:rgba(255,255,255,.52); --glass-strong:rgba(255,255,255,.72); --rim:rgba(255,255,255,.75);
+    --glass-blur:blur(22px) saturate(185%); --glass-shadow:0 10px 30px rgba(15,25,40,.22), inset 0 1px 0 rgba(255,255,255,.9), inset 0 -1px 0 rgba(255,255,255,.25); }
+  body { font-family:-apple-system, "SF Pro Text", system-ui, "Segoe UI", sans-serif; }
+  .bar, .card, .toast, .sugg, .end, .langnav, .zoomctl button, .fab > button, .fab .tray button {
+    background:var(--glass); -webkit-backdrop-filter:var(--glass-blur); backdrop-filter:var(--glass-blur);
+    border:1px solid var(--rim); box-shadow:var(--glass-shadow); color:var(--text); }
+  .bar { border-radius:24px; }
+  .card { border-radius:28px; }
+  .toast { border-radius:20px; background:var(--glass-strong); }
+  .overlay { background:rgba(10,20,35,.25); -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px); }
+  .field input, #langSel { background:rgba(255,255,255,.55); border:1px solid rgba(255,255,255,.8); color:var(--text); border-radius:14px; box-shadow:inset 0 1px 2px rgba(0,0,0,.06); }
+  .field input::placeholder { color:#6b7a8c; }
+  #langSel { border-radius:12px; }
+  .sugg { border-radius:16px; margin-top:6px; background:var(--glass-strong); }
+  .sugg div { border-bottom:1px solid rgba(0,0,0,.06); }
+  .sugg div:hover { background:rgba(10,132,255,.12); }
+  button { border-radius:999px; color:#fff; }
+  .btns button { padding:10px 18px; }
+  button.ghost { background:rgba(255,255,255,.55); color:var(--text); border:1px solid var(--rim); }
+  .fab > button { font-weight:700; }
+  .fab .tray button { border-radius:16px; }
+  .end, .langnav, .zoomctl button { color:var(--text); }
+  #tujuNav.on { background:rgba(255,59,107,.85); color:#fff; border-color:rgba(255,255,255,.5); }
+  .track { background:rgba(120,130,145,.35); }
+  .lane { background:rgba(15,25,40,.08); color:#7c8a9b; border-radius:12px; }
+  .lane.ok { background:var(--accent); color:#fff; box-shadow:0 4px 12px rgba(10,132,255,.35); }
+  .lane.me { box-shadow:inset 0 0 0 3px #0b1220; }
+  .lane.me::after { background:#0b1220; box-shadow:0 0 0 2px #fff; }
+  .lane-hint { border-radius:12px; }
+  .lane-hint.move { background:rgba(255,176,32,.9); }
+  .lane-hint.good { background:rgba(48,176,99,.92); }
+  .light { background:rgba(15,25,40,.07); border-radius:14px; }
+  .spinner { border-color:rgba(15,25,40,.12); border-top-color:var(--accent); }
+  body.driving #bottom { border-radius:22px; }
+  .maplibregl-ctrl-attrib { background:rgba(255,255,255,.5) !important; -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); border-radius:10px; }
 </style>
 </head>
 <body>
